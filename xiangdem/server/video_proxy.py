@@ -32,10 +32,10 @@ def add_cors_headers(response):
 
 # ===== 单独处理OPTIONS预检（绕过业务逻辑） =====
 @app.route('/<path:path>', methods=['OPTIONS'])
-@app.route('/', methods=['OPTIONS'], subdomain='<subdomain>')
-def options_handler(path=None, subdomain=None):
-    """所有OPTIONS请求直接返回200"""
-    return '', 200
+def options_handler(path):
+    """所有OPTIONS请求直接返回200 + CORS头"""
+    resp = app.make_response(('', 200))
+    return resp
 
 @app.route('/api/health', methods=['GET', 'OPTIONS'])
 def health():
