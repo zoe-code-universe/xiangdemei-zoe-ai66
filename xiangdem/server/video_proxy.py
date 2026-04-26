@@ -31,11 +31,11 @@ def add_cors_headers(response):
     return response
 
 # ===== 单独处理OPTIONS预检（绕过业务逻辑） =====
+from flask import Response
 @app.route('/<path:path>', methods=['OPTIONS'])
 def options_handler(path):
-    """所有OPTIONS请求直接返回200 + CORS头"""
-    resp = app.make_response(('', 200))
-    return resp
+    """所有OPTIONS请求直接返回200"""
+    return Response(status=200)
 
 @app.route('/api/health', methods=['GET', 'OPTIONS'])
 def health():
