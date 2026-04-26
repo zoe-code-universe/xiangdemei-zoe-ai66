@@ -134,14 +134,14 @@ def ark_poll(task_id):
         headers={'Authorization': f'Bearer {ARK_KEY}'},
         method='GET'
     )
-    with urllib.request.urlopen(req, timeout=30, context=ssl._CREATE_unverified_context()) as resp:
+    with urllib.request.urlopen(req, timeout=30, context=ssl._create_unverified_context()) as resp:
         task = json.loads(resp.read())
         status = task.get('status')
         video_url = (task.get('content') or {}).get('video_url', '')
         return status, video_url
 
 def download_video(url, path):
-    with urllib.request.urlopen(url, timeout=60, context=ssl._CREATE_unverified_context()) as resp:
+    with urllib.request.urlopen(url, timeout=60, context=ssl._create_unverified_context()) as resp:
         with open(path, 'wb') as f:
             while True:
                 chunk = resp.read(65536)
