@@ -76,7 +76,7 @@ def generate_long():
     except Exception as e:
         return jsonify({'error': str(e)}), 500
 
-def background_generate_long(task_id, segments, num):
+def background_generate_long(async_task_id, segments, num):
     """后台执行多段生成"""
     run_id = uuid.uuid4().hex[:8]
     seg_files, seg_urls = [], []
@@ -87,30 +87,30 @@ def background_generate_long(task_id, segments, num):
             tid = ark_submit(p, d)
             st, url = wait_ark(tid)
             if st != 'succeeded':
-                TASK_RESULTS[task_id] = {'status': 'failed', 'video_url': '', 'error': f'第{i+1}段失败'}
+                TASK_RESULTS[async_task_id] = {'status': 'failed', 'video_url': '', 'error': f'第{i+1}段失败'}
                 return
             path = os.path.join(TEMP_DIR, f'{run_id}_s{i+1:02d}.mp4')
             download(url, path)
             seg_files.append(path)
             seg_urls.append(url)
-            print(f'  任务{task_id} 第{i+1}段完成')
+            print(f'  任务{async_task_id} 第{i+1}段完成')
         
         if num == 1:
-            TASK_RESULTS[task_id] = {'status': 'succeeded', 'video_url': seg_urls[0], 'error': ''}
+            TASK_RESULTS[async_task_id] = {'status': 'succeeded', 'video_url': seg_urls[0], 'error': ''}
             return
         
         out = os.path.join(TEMP_DIR, f'{run_id}_final.mp4')
         concat(seg_files, out)
         for f in seg_files:
             os.remove(f)
-        TASK_RESULTS[task_id] = {
+        TASK_RESULTS[async_task_id] = {
             'status': 'succeeded',
             'video_url': f'{request.url_root}api/video/serve/{out}',
             'error': ''
         }
-        print(f'  任务{task_id} 全部完成')
+        print(f'  任务{async_task_id} 全部完成')
     except Exception as e:
-        TASK_RESULTS[task_id] = {'status': 'failed', 'video_url': '', 'error': str(e)}
+        TASK_RESULTS[async_task_id] = {'status': 'failed', 'video_url': '', 'error': str(e)}
 
 # ===== 轮询任务状态 =====
 @app.route('/api/video/status/<task_id>', methods=['GET'])
