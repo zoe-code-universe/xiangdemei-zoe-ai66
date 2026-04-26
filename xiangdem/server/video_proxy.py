@@ -8,8 +8,10 @@ import json
 import urllib.request
 import subprocess
 from flask import Flask, request, jsonify, send_file
+from flask_cors import CORS
 
 app = Flask(__name__)
+CORS(app)
 
 PORT = int(os.environ.get('PORT', 8080))
 ARK_KEY = os.environ.get('ARK_KEY', 'ARK_KEY_REDACTED')
