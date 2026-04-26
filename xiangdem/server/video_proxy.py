@@ -1,5 +1,8 @@
 #!/usr/bin/env python3
-"""火山方舟(ARK)视频生成代理 + 多段拼接 - Flask版本"""
+"""
+火山方舟(ARK)视频生成代理 - Flask版本
+完整CORS支持 + 动态URL
+"""
 import os
 import ssl
 import uuid
@@ -8,43 +11,70 @@ import json
 import urllib.request
 import subprocess
 from flask import Flask, request, jsonify, send_file
-from flask_cors import CORS
 
 app = Flask(__name__)
-CORS(app)
 
+# ===== 配置 =====
 PORT = int(os.environ.get('PORT', 8080))
 ARK_KEY = os.environ.get('ARK_KEY', 'ark-2a29718e-e5b8-47d7-b454-792d948835fd-6fb13')
 ARK_BASE = 'https://ark.cn-beijing.volces.com'
 MODEL = 'doubao-seedance-2-0-260128'
 TEMP_DIR = tempfile.mkdtemp(prefix='xiangdem_')
 
-@app.route('/api/video/generate', methods=['POST'])
+# ===== CORS 预检处理 =====
+@app.before_request
+def handle_preflight():
+    if request.method == 'OPTIONS':
+        response = app.make_response('')
+        response.headers['Access-Control-Allow-Origin'] = '*'
+        response.headers['Access-Control-Allow-Methods'] = 'GET, POST, OPTIONS'
+        response.headers['Access-Control-Allow-Headers'] = 'Content-Type'
+        response.headers['Access-Control-Max-Age'] = '86400'
+        response.headers['Access-Control-Expose-Headers'] = 'Content-Type'
+        response.status_code = 200
+        return response
+
+@app.after_request
+def add_cors_headers(response):
+    response.headers['Access-Control-Allow-Origin'] = '*'
+    response.headers['Access-Control-Allow-Methods'] = 'GET, POST, OPTIONS'
+    response.headers['Access-Control-Allow-Headers'] = 'Content-Type'
+    return response
+
+# ===== 健康检查 =====
+@app.route('/api/health', methods=['GET', 'OPTIONS'])
+def health():
+    return jsonify({'status': 'ok'})
+
+# ===== 单段视频生成 =====
+@app.route('/api/video/generate', methods=['POST', 'OPTIONS'])
 def handle_generate():
-    body = request.json
-    prompt = body.get('prompt', '')[:500]
-    duration = min(max(int(body.get('duration', 5)), 5), 11)
     try:
+        body = request.json or {}
+        prompt = str(body.get('prompt', ''))[:500]
+        duration = min(max(int(body.get('duration', 5)), 5), 11)
         task_id = ark_submit(prompt, duration)
         return jsonify({'task_id': task_id, 'status': 'pending'})
     except Exception as e:
         return jsonify({'error': str(e)}), 500
 
-@app.route('/api/video/generate-long', methods=['POST'])
+# ===== 多段视频生成+拼接 =====
+@app.route('/api/video/generate-long', methods=['POST', 'OPTIONS'])
 def handle_generate_long():
-    body = request.json
-    segments = body.get('segments', [])
-    total_duration = int(body.get('total_duration', len(segments) * 10))
-    num_segments = len(segments)
-    print(f'收到分段生成请求: {num_segments}段, 总时长{total_duration}秒')
-    run_id = uuid.uuid4().hex[:8]
-    segment_files = []
-    segment_urls = []
     try:
+        body = request.json or {}
+        segments = body.get('segments', [])
+        total_duration = int(body.get('total_duration', len(segments) * 10))
+        num_segments = len(segments)
+        print(f'收到分段生成请求: {num_segments}段, 总时长{total_duration}秒')
+        run_id = uuid.uuid4().hex[:8]
+        segment_files = []
+        segment_urls = []
+
         for i, seg in enumerate(segments):
-            prompt = seg.get('prompt', '')[:500]
+            prompt = str(seg.get('prompt', ''))[:500]
             duration = min(int(seg.get('duration', 10)), 11)
-            print(f'  提交第{i+1}/{num_segments}段')
+            print(f'  提交第{i+1}/{num_segments}段, prompt: {prompt[:30]}...')
             task_id = ark_submit(prompt, duration)
             status, video_url = wait_ark(task_id)
             if status != 'succeeded':
@@ -54,21 +84,24 @@ def handle_generate_long():
             segment_files.append(seg_path)
             segment_urls.append(video_url)
             print(f'  第{i+1}段完成')
+
         if num_segments == 1:
             return jsonify({'status': 'succeeded', 'video_url': segment_urls[0], 'segments': segment_urls})
+
         output_path = os.path.join(TEMP_DIR, f'{run_id}_final.mp4')
         print(f'开始拼接{len(segment_files)}个视频段...')
         concat_videos(segment_files, output_path)
         size = os.path.getsize(output_path)
         for f in segment_files:
             os.remove(f)
-        serve_url = f'https://thorough-contentment-production-0bd7.up.railway.app/api/video/serve/{output_path}'
+        serve_url = f'{request.url_root}api/video/serve/{output_path}'
         return jsonify({'status': 'succeeded', 'video_url': serve_url, 'segments': segment_urls, 'size_bytes': size})
     except Exception as e:
         print(f'分段生成失败: {e}')
         return jsonify({'error': str(e)}), 500
 
-@app.route('/api/video/status/<task_id>', methods=['GET'])
+# ===== 轮询任务状态 =====
+@app.route('/api/video/status/<task_id>', methods=['GET', 'OPTIONS'])
 def handle_status(task_id):
     try:
         status, video_url = ark_poll(task_id)
@@ -76,20 +109,17 @@ def handle_status(task_id):
     except Exception as e:
         return jsonify({'error': str(e)}), 500
 
-@app.route('/api/video/serve/<path:filename>', methods=['GET'])
+# ===== 服务本地视频文件 =====
+@app.route('/api/video/serve/<path:filename>', methods=['GET', 'OPTIONS'])
 def serve_video(filename):
     safe_dir = TEMP_DIR.replace('/', '')
     if safe_dir not in filename or '..' in filename:
         return 'Forbidden', 403
-    file_path = filename
-    if os.path.exists(file_path):
-        return send_file(file_path, mimetype='video/mp4')
+    if os.path.exists(filename):
+        return send_file(filename, mimetype='video/mp4')
     return 'Not found', 404
 
-@app.route('/api/health', methods=['GET'])
-def health():
-    return jsonify({'status': 'ok'})
-
+# ===== ARK API =====
 def ark_submit(prompt, duration):
     body = json.dumps({
         'model': MODEL,
@@ -153,4 +183,5 @@ def wait_ark(task_id, max_wait=600):
     return 'timeout', ''
 
 if __name__ == '__main__':
+    print(f'ARK proxy starting on :{PORT}')
     app.run(host='0.0.0.0', port=PORT)
