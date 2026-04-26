@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """
 火山方舟(ARK)视频生成代理 - Flask版本
-完整CORS支持 + 动态URL
+纯手动CORS，无第三方依赖
 """
 import os
 import ssl
@@ -21,32 +21,26 @@ ARK_BASE = 'https://ark.cn-beijing.volces.com'
 MODEL = 'doubao-seedance-2-0-260128'
 TEMP_DIR = tempfile.mkdtemp(prefix='xiangdem_')
 
-# ===== CORS 预检处理 =====
-@app.before_request
-def handle_preflight():
-    if request.method == 'OPTIONS':
-        response = app.make_response('')
-        response.headers['Access-Control-Allow-Origin'] = '*'
-        response.headers['Access-Control-Allow-Methods'] = 'GET, POST, OPTIONS'
-        response.headers['Access-Control-Allow-Headers'] = 'Content-Type'
-        response.headers['Access-Control-Max-Age'] = '86400'
-        response.headers['Access-Control-Expose-Headers'] = 'Content-Type'
-        response.status_code = 200
-        return response
-
+# ===== 统一CORS响应头（所有路由） =====
 @app.after_request
 def add_cors_headers(response):
     response.headers['Access-Control-Allow-Origin'] = '*'
     response.headers['Access-Control-Allow-Methods'] = 'GET, POST, OPTIONS'
     response.headers['Access-Control-Allow-Headers'] = 'Content-Type'
+    response.headers['Access-Control-Max-Age'] = '86400'
     return response
 
-# ===== 健康检查 =====
+# ===== 单独处理OPTIONS预检（绕过业务逻辑） =====
+@app.route('/<path:path>', methods=['OPTIONS'])
+@app.route('/', methods=['OPTIONS'], subdomain='<subdomain>')
+def options_handler(path=None, subdomain=None):
+    """所有OPTIONS请求直接返回200"""
+    return '', 200
+
 @app.route('/api/health', methods=['GET', 'OPTIONS'])
 def health():
     return jsonify({'status': 'ok'})
 
-# ===== 单段视频生成 =====
 @app.route('/api/video/generate', methods=['POST', 'OPTIONS'])
 def handle_generate():
     try:
@@ -58,7 +52,6 @@ def handle_generate():
     except Exception as e:
         return jsonify({'error': str(e)}), 500
 
-# ===== 多段视频生成+拼接 =====
 @app.route('/api/video/generate-long', methods=['POST', 'OPTIONS'])
 def handle_generate_long():
     try:
@@ -94,13 +87,12 @@ def handle_generate_long():
         size = os.path.getsize(output_path)
         for f in segment_files:
             os.remove(f)
-        serve_url = f'{request.url_root}api/video/serve/{output_path}'
+        serve_url = f'https://thorough-contentment-production-89d3.up.railway.app/api/video/serve/{output_path}'
         return jsonify({'status': 'succeeded', 'video_url': serve_url, 'segments': segment_urls, 'size_bytes': size})
     except Exception as e:
         print(f'分段生成失败: {e}')
         return jsonify({'error': str(e)}), 500
 
-# ===== 轮询任务状态 =====
 @app.route('/api/video/status/<task_id>', methods=['GET', 'OPTIONS'])
 def handle_status(task_id):
     try:
@@ -109,7 +101,6 @@ def handle_status(task_id):
     except Exception as e:
         return jsonify({'error': str(e)}), 500
 
-# ===== 服务本地视频文件 =====
 @app.route('/api/video/serve/<path:filename>', methods=['GET', 'OPTIONS'])
 def serve_video(filename):
     safe_dir = TEMP_DIR.replace('/', '')
@@ -143,14 +134,14 @@ def ark_poll(task_id):
         headers={'Authorization': f'Bearer {ARK_KEY}'},
         method='GET'
     )
-    with urllib.request.urlopen(req, timeout=30, context=ssl._create_unverified_context()) as resp:
+    with urllib.request.urlopen(req, timeout=30, context=ssl._CREATE_unverified_context()) as resp:
         task = json.loads(resp.read())
         status = task.get('status')
         video_url = (task.get('content') or {}).get('video_url', '')
         return status, video_url
 
 def download_video(url, path):
-    with urllib.request.urlopen(url, timeout=60, context=ssl._create_unverified_context()) as resp:
+    with urllib.request.urlopen(url, timeout=60, context=ssl._CREATE_unverified_context()) as resp:
         with open(path, 'wb') as f:
             while True:
                 chunk = resp.read(65536)
@@ -183,5 +174,5 @@ def wait_ark(task_id, max_wait=600):
     return 'timeout', ''
 
 if __name__ == '__main__':
-    print(f'ARK proxy starting on :{PORT}')
+    print(f'ARK proxy starting on 0.0.0.0:{PORT}')
     app.run(host='0.0.0.0', port=PORT)
