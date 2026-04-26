@@ -1,8 +1,8 @@
-[[build]]
+[build]
 builder = "nixpacks"
 buildCommand = "pip install -r requirements.txt"
 
-[[build.env]]
+[build.env]
 PORT = "8080"
 
 [deploy]
@@ -10,3 +10,6 @@ healthcheckPath = "/api/health"
 healthcheckInterval = "10"
 restartPolicyType = "always"
 restartPolicyMaxRetries = 10
+
+[start]
+command = "cd xiangdem && python3 server/video_proxy.py"
