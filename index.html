@@ -1481,13 +1481,14 @@
       }
       console.log('[callJimengVideoMulti] 开始分段生成', segmentTexts.length, '段');
       
-      // 调用多段生成接口（代理内部完成：分段生成+ffmpeg拼接）
+      // 调用多段生成接口
       const resp = await fetch(`${VIDEO_PROXY}/api/video/generate-long`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           segments: segmentTexts.map(p => ({ prompt: p, duration: 10 })),
-          total_duration: totalDuration
+          total_duration: totalDuration,
+          async: true
         })
       });
       
@@ -1500,12 +1501,32 @@
       const result = await resp.json();
       console.log('[callJimengVideoMulti] 响应:', result);
       
+      // 异步模式：等待任务完成
+      if (result.status === 'running' && result.task_id) {
+        console.log('[callJimengVideoMulti] 异步任务ID:', result.task_id, '开始轮询...');
+        const maxAttempts = 60; // 最多60次
+        for (let i = 0; i < maxAttempts; i++) {
+          await new Promise(r => setTimeout(r, 15000)); // 每15秒轮询
+          const pollResp = await fetch(`${VIDEO_PROXY}/api/video/status/${result.task_id}`);
+          const pollData = await pollResp.json();
+          console.log('[callJimengVideoMulti] 轮询' + (i+1) + '/' + maxAttempts + ':', pollData.status);
+          if (pollData.status === 'succeeded') {
+            console.log('[callJimengVideoMulti] 成功! video_url:', pollData.video_url);
+            return { data: { video_url: pollData.video_url } };
+          }
+          if (pollData.status === 'failed') {
+            throw new Error('视频生成失败: ' + (pollData.error || 'unknown'));
+          }
+          // running/pending，继续轮询
+        }
+        throw new Error('视频生成超时，请稍后重试');
+      }
+      
       if (result.status === 'succeeded') {
         return { data: { video_url: result.video_url, segments: result.segments } };
       } else if (result.error) {
         throw new Error(result.error);
       } else {
-        // 轮询中（如果接口改为异步，则需要轮询）
         throw new Error('分段生成接口返回异常: ' + JSON.stringify(result));
       }
     }
