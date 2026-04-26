@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
-"""火山方舟(ARK)视频生成代理"""
-import os, ssl, uuid, tempfile, json, urllib.request, subprocess
+"""火山方舟(ARK)视频生成代理 - Flask版本"""
+import os, ssl, uuid, tempfile, json, urllib.request, subprocess, threading
 from flask import Flask, request, jsonify, send_file, Response
 
 app = Flask(__name__)
@@ -11,7 +11,10 @@ ARK_BASE = 'https://ark.cn-beijing.volces.com'
 MODEL = 'doubao-seedance-2-0-260128'
 TEMP_DIR = tempfile.mkdtemp(prefix='xiangdem_')
 
-# 所有响应加CORS头
+# 任务状态存储
+TASK_RESULTS = {}  # task_id -> {status, video_url, error}
+
+# ===== 全局CORS头 =====
 @app.after_request
 def add_cors(res):
     res.headers['Access-Control-Allow-Origin'] = '*'
@@ -20,16 +23,17 @@ def add_cors(res):
     res.headers['Access-Control-Max-Age'] = '86400'
     return res
 
-# OPTIONS预检直接返回200
 @app.route('/<path:path>', methods=['OPTIONS'])
 @app.route('/', methods=['OPTIONS'])
 def options(path=None):
     return Response(status=200)
 
+# ===== 健康检查 =====
 @app.route('/api/health', methods=['GET'])
 def health():
     return jsonify({'status': 'ok'})
 
+# ===== 单段生成 =====
 @app.route('/api/video/generate', methods=['POST'])
 def generate():
     try:
@@ -41,43 +45,94 @@ def generate():
     except Exception as e:
         return jsonify({'error': str(e)}), 500
 
-@app.route('/api/video/status/<task_id>', methods=['GET'])
-def status(task_id):
-    try:
-        st, url = ark_poll(task_id)
-        return jsonify({'status': st, 'video_url': url})
-    except Exception as e:
-        return jsonify({'error': str(e)}), 500
-
+# ===== 多段生成（异步模式）====================
 @app.route('/api/video/generate-long', methods=['POST'])
 def generate_long():
+    """
+    异步模式：立即返回task_id，后台完成
+    前端通过 /api/video/status/{task_id} 查询结果
+    """
     try:
         body = request.json or {}
         segments = body.get('segments', [])
         num = len(segments)
-        run_id = uuid.uuid4().hex[:8]
-        seg_files, seg_urls = [], []
+        async_mode = body.get('async', True)  # 默认异步
+
+        if not async_mode:
+            # 同步模式（保持兼容）
+            return do_generate_long_sync(segments, num)
+        
+        # 异步模式：立即返回，后台处理
+        task_id = f"async-{uuid.uuid4().hex[:12]}"
+        print(f'异步任务 {task_id}：{num}段，后台处理中')
+        TASK_RESULTS[task_id] = {'status': 'running', 'video_url': '', 'error': ''}
+        
+        # 后台线程处理
+        t = threading.Thread(target=background_generate_long, args=(task_id, segments, num))
+        t.daemon = True
+        t.start()
+        
+        return jsonify({'task_id': task_id, 'status': 'running'})
+    except Exception as e:
+        return jsonify({'error': str(e)}), 500
+
+def background_generate_long(task_id, segments, num):
+    """后台执行多段生成"""
+    run_id = uuid.uuid4().hex[:8]
+    seg_files, seg_urls = [], []
+    try:
         for i, seg in enumerate(segments):
             p = str(seg.get('prompt', ''))[:500]
             d = min(int(seg.get('duration', 10)), 11)
             tid = ark_submit(p, d)
             st, url = wait_ark(tid)
             if st != 'succeeded':
-                return jsonify({'status': 'failed', 'error': f'第{i+1}段失败'}), 500
+                TASK_RESULTS[task_id] = {'status': 'failed', 'video_url': '', 'error': f'第{i+1}段失败'}
+                return
             path = os.path.join(TEMP_DIR, f'{run_id}_s{i+1:02d}.mp4')
             download(url, path)
             seg_files.append(path)
             seg_urls.append(url)
+            print(f'  任务{task_id} 第{i+1}段完成')
+        
         if num == 1:
-            return jsonify({'status': 'succeeded', 'video_url': seg_urls[0], 'segments': seg_urls})
+            TASK_RESULTS[task_id] = {'status': 'succeeded', 'video_url': seg_urls[0], 'error': ''}
+            return
+        
         out = os.path.join(TEMP_DIR, f'{run_id}_final.mp4')
         concat(seg_files, out)
         for f in seg_files:
             os.remove(f)
-        return jsonify({'status': 'succeeded', 'video_url': f'{request.url_root}api/video/serve/{out}', 'size_bytes': os.path.getsize(out)})
+        TASK_RESULTS[task_id] = {
+            'status': 'succeeded',
+            'video_url': f'{request.url_root}api/video/serve/{out}',
+            'error': ''
+        }
+        print(f'  任务{task_id} 全部完成')
     except Exception as e:
-        return jsonify({'error': str(e)}), 500
+        TASK_RESULTS[task_id] = {'status': 'failed', 'video_url': '', 'error': str(e)}
 
+# ===== 轮询任务状态 =====
+@app.route('/api/video/status/<task_id>', methods=['GET'])
+def status(task_id):
+    # 普通 ARK task_id
+    try:
+        st, url = ark_poll(task_id)
+        return jsonify({'status': st, 'video_url': url})
+    except Exception:
+        pass
+    
+    # 异步任务ID
+    if task_id in TASK_RESULTS:
+        return jsonify({
+            'status': TASK_RESULTS[task_id]['status'],
+            'video_url': TASK_RESULTS[task_id]['video_url'],
+            'error': TASK_RESULTS[task_id]['error']
+        })
+    
+    return jsonify({'status': 'not_found', 'video_url': '', 'error': '任务不存在'})
+
+# ===== 服务本地视频 =====
 @app.route('/api/video/serve/<path:f>', methods=['GET'])
 def serve(f):
     if '..' in f:
@@ -86,6 +141,7 @@ def serve(f):
         return send_file(f, mimetype='video/mp4')
     return 'Not found', 404
 
+# ===== ARK API =====
 def ark_submit(prompt, duration):
     body = json.dumps({
         'model': MODEL,
@@ -140,6 +196,32 @@ def wait_ark(task_id, maxt=600):
             return 'failed', ''
         time.sleep(15)
     return 'timeout', ''
+
+# 同步多段生成（兼容旧逻辑）
+def do_generate_long_sync(segments, num):
+    run_id = uuid.uuid4().hex[:8]
+    seg_files, seg_urls = [], []
+    try:
+        for i, seg in enumerate(segments):
+            p = str(seg.get('prompt', ''))[:500]
+            d = min(int(seg.get('duration', 10)), 11)
+            tid = ark_submit(p, d)
+            st, url = wait_ark(tid)
+            if st != 'succeeded':
+                return jsonify({'status': 'failed', 'error': f'第{i+1}段失败'}), 500
+            path = os.path.join(TEMP_DIR, f'{run_id}_s{i+1:02d}.mp4')
+            download(url, path)
+            seg_files.append(path)
+            seg_urls.append(url)
+        if num == 1:
+            return jsonify({'status': 'succeeded', 'video_url': seg_urls[0], 'segments': seg_urls})
+        out = os.path.join(TEMP_DIR, f'{run_id}_final.mp4')
+        concat(seg_files, out)
+        for f in seg_files:
+            os.remove(f)
+        return jsonify({'status': 'succeeded', 'video_url': f'{request.url_root}api/video/serve/{out}', 'size_bytes': os.path.getsize(out)})
+    except Exception as e:
+        return jsonify({'error': str(e)}), 500
 
 if __name__ == '__main__':
     print(f'ARK proxy starting on 0.0.0.0:{PORT}')
