@@ -1472,6 +1472,22 @@
      * @param {number} totalDuration - 目标总时长
      * @param {Function} onProgress - 进度回调 (segmentIndex, totalSegments, status)
      */
+    // ===== 敏感词过滤（防止 ARK 内容审核拦截）=====
+    const SENSITIVE_PATTERNS = [
+      /super[_-]?hero/i, /batman|spiderman|ironman|superman|thor|hulk|captain america/i,
+      /marvel|dc comics/i, /wolverine|deadpool|venom/i,
+      /porn|xxx|sex/i, /nude|naked/i,
+      /gore|blood/i, /weapon|gun/i,
+    ];
+
+    function checkSensitive(text) {
+      const found = [];
+      for (const p of SENSITIVE_PATTERNS) {
+        if (p.test(text)) found.push(p.source.replace(/\\/g,'').replace(/\||\/i/g,' '));
+      }
+      return found;
+    }
+
     async function callJimengVideoMulti(segmentTexts, totalDuration) {
       if (segmentTexts.length === 1) {
         return callJimengVideo(segmentTexts[0], totalDuration);
@@ -1607,7 +1623,17 @@
           const shots = STATE.script.split(/【镜头\d+】/).filter(s => s.trim());
           segmentTexts.push(shots.map(s => s.replace(/时长：\d+秒\n*/g, '').trim()).join(' | ').slice(0, 400));
         }
-        
+
+        // 敏感词检测
+        for (let i = 0; i < segmentTexts.length; i++) {
+          const bad = checkSensitive(segmentTexts[i]);
+          if (bad.length > 0) {
+            genPanel.innerHTML = `<div style="padding:24px;color:#fbbf24;">⚠️ 第${i+1}段提示词含敏感词：${bad.join(', ')}<br><br>请修改分镜描述，去掉相关词汇后重试。</div>`;
+            videoBtn.disabled = false;
+            return;
+          }
+        }
+
         progressFill.style.width = '30%';
 
         statusText.textContent = numSegments > 1 ? `正在生成第1/${numSegments}段视频...` : '正在生成视频...';
@@ -1688,7 +1714,17 @@
           const shots = STATE.script.split(/【镜头\d+】/).filter(s => s.trim());
           segmentTexts.push(shots.map(s => s.replace(/时长：\d+秒\n*/g, '').trim()).join(' | ').slice(0, 400));
         }
-        
+
+        // 敏感词检测
+        for (let i = 0; i < segmentTexts.length; i++) {
+          const bad = checkSensitive(segmentTexts[i]);
+          if (bad.length > 0) {
+            genPanel.innerHTML = `<div style="padding:24px;color:#fbbf24;">⚠️ 第${i+1}段提示词含敏感词：${bad.join(', ')}<br><br>请修改分镜描述，去掉相关词汇后重试。</div>`;
+            videoBtn.disabled = false;
+            return;
+          }
+        }
+
         progressFill.style.width = '30%';
 
         statusText.textContent = numSegments > 1 ? `正在生成第1/${numSegments}段视频...` : '正在生成视频...';
