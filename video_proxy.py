@@ -62,6 +62,17 @@ def health():
 DEEPSEEK_KEY = os.environ.get('DEEPSEEK_KEY', '')
 DEEPSEEK_BASE = 'https://api.deepseek.com'
 
+@app.route('/api/debug/env', methods=['GET'])
+def debug_env():
+    ark = os.environ.get('ARK_KEY', '')
+    ds = os.environ.get('DEEPSEEK_KEY', '')
+    return jsonify({
+        'ARK_KEY_len': len(ark),
+        'ARK_KEY_masked': ark[:6] + '...' if ark else 'EMPTY',
+        'DEEPSEEK_KEY_len': len(ds),
+        'DEEPSEEK_KEY_masked': ds[:6] + '...' if ds else 'EMPTY',
+    })
+
 @app.route('/api/deepseek', methods=['POST'])
 def deepseek_proxy():
     try:
