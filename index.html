@@ -1325,14 +1325,11 @@
       });
     }
 
-    // ============ DeepSeek API ============
+    // ============ DeepSeek API（走 Railway 后端代理）============
     async function callDeepSeek(prompt) {
-      const response = await fetch('https://api.deepseek.com/chat/completions', {
+      const response = await fetch(`${VIDEO_PROXY}/api/deepseek`, {
         method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          'Authorization': 'Bearer sk-2a3e986c69224b9294db3610b414d894'
-        },
+        headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           model: 'deepseek-chat',
           messages: [
