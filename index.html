@@ -1327,7 +1327,7 @@
 
     // ============ DeepSeek API（走 Railway 后端代理）============
     async function callDeepSeek(prompt) {
-      const response = await fetch(`${VIDEO_PROXY}/api/deepseek`, {
+      const response = await fetchWithTimeout(`${VIDEO_PROXY}/api/deepseek`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
@@ -1426,44 +1426,56 @@
 
     // ============ 视频生成API（走本地代理避免CORS）============
     const VIDEO_PROXY = 'https://thorough-contentment-production-89d3.up.railway.app';
+    const FETCH_TIMEOUT_MS = 30000;   // fetch 单次超时 30 秒
+    const POLL_INTERVAL_MS = 4000;    // 轮询间隔 4 秒
+    const POLL_MAX_MS = 600000;        // 总轮询超时 10 分钟
 
-    async function callJimengVideo(prompt, duration) {
-      console.log('[callJimengVideo] 开始，prompt:', prompt.slice(0, 50), 'duration:', duration);
-      // 1. 提交任务到本地代理
-      const createResp = await fetch(`${VIDEO_PROXY}/api/video/generate`, {
+    // 带超时的 fetch 封装
+    async function fetchWithTimeout(url, options = {}) {
+      const controller = new AbortController();
+      const timer = setTimeout(() => controller.abort(), FETCH_TIMEOUT_MS);
+      try {
+        const resp = await fetch(url, { ...options, signal: controller.signal });
+        clearTimeout(timer);
+        return resp;
+      } catch (e) {
+        clearTimeout(timer);
+        if (e.name === 'AbortError') throw new Error(`请求超时（${FETCH_TIMEOUT_MS/1000}秒）`);
+        throw e;
+      }
+    }
+
+    // 提交任务
+    async function submitVideoTask(prompt, duration) {
+      const resp = await fetchWithTimeout(`${VIDEO_PROXY}/api/video/generate`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ prompt: prompt.slice(0, 500), duration: Math.min(Math.max(duration, 5), 11) })
       });
-      console.log('[callJimengVideo] 提交响应状态:', createResp.status);
-      if (!createResp.ok) {
-        const errTxt = await createResp.text();
-        console.error('[callJimengVideo] 提交失败:', errTxt);
-        throw new Error(`提交失败 ${createResp.status}: ${errTxt}`);
-      }
-      const respData = await createResp.json();
-      console.log('[callJimengVideo] task_id:', respData.task_id);
-      const { task_id: taskId } = respData;
+      if (!resp.ok) throw new Error(`提交失败 ${resp.status}`);
+      return (await resp.json()).task_id;
+    }
 
-      // 2. 轮询任务状态（最多60次，每次15秒）
-      const maxAttempts = 60;
-      for (let i = 0; i < maxAttempts; i++) {
-        await new Promise(r => setTimeout(r, 15000));
-        const pollResp = await fetch(`${VIDEO_PROXY}/api/video/status/${taskId}`);
-        const task = await pollResp.json();
-        console.log(`[callJimengVideo] 轮询${i+1}/${maxAttempts}: status=${task.status}, video_url=${(task.video_url||'').slice(0,30)}`);
-        if (task.status === 'succeeded') {
-          console.log('[callJimengVideo] 成功！video_url:', task.video_url.slice(0, 50));
-          return { data: { video_url: task.video_url || '', task_id: taskId } };
-        }
-        if (task.status === 'failed') {
-          console.error('[callJimengVideo] 失败:', task.error);
-          throw new Error(`视频生成失败: ${task.error || 'unknown'}`);
-        }
-        // running/pending，继续轮询
+    // 轮询任务状态
+    async function pollVideoTask(taskId, onProgress) {
+      const start = Date.now();
+      while (Date.now() - start < POLL_MAX_MS) {
+        await new Promise(r => setTimeout(r, POLL_INTERVAL_MS));
+        const resp = await fetchWithTimeout(`${VIDEO_PROXY}/api/video/status/${taskId}`);
+        const t = await resp.json();
+        if (t.status === 'succeeded') return t.video_url || '';
+        if (t.status === 'failed') throw new Error(`视频生成失败[failure_code=${t.failure_code || 'UNKNOWN'}]`);
+        if (onProgress) onProgress(t.progress || 0);
       }
-      console.error('[callJimengVideo] 超时');
       throw new Error('视频生成超时，请稍后重试');
+    }
+
+    // 单段视频生成
+    async function callJimengVideo(prompt, duration, onProgress) {
+      const taskId = await submitVideoTask(prompt, duration);
+      console.log('[callJimengVideo] task_id:', taskId);
+      const videoUrl = await pollVideoTask(taskId, onProgress);
+      return { data: { video_url: videoUrl, task_id: taskId } };
     }
 
     /**
@@ -1488,20 +1500,19 @@
       return found;
     }
 
-    async function callJimengVideoMulti(segmentTexts, totalDuration) {
+    async function callJimengVideoMulti(segmentTexts, totalDuration, onSegmentProgress) {
       if (segmentTexts.length === 1) {
-        return callJimengVideo(segmentTexts[0], totalDuration);
+        return callJimengVideo(segmentTexts[0], totalDuration, onSegmentProgress);
       }
       console.log('[callJimengVideoMulti] 开始分段生成', segmentTexts.length, '段');
       
       // 调用多段生成接口
-      const resp = await fetch(`${VIDEO_PROXY}/api/video/generate-long`, {
+      const resp = await fetchWithTimeout(`${VIDEO_PROXY}/api/video/generate-long`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           segments: segmentTexts.map(p => ({ prompt: p, duration: 10 })),
-          total_duration: totalDuration,
-          async: true
+          total_duration: totalDuration
         })
       });
       
@@ -1515,22 +1526,22 @@
       console.log('[callJimengVideoMulti] 响应:', result);
       
       // 异步模式：等待任务完成
-      if (result.status === 'running' && result.task_id) {
+      if (result.task_id) {
         console.log('[callJimengVideoMulti] 异步任务ID:', result.task_id, '开始轮询...');
-        const maxAttempts = 60; // 最多60次
-        for (let i = 0; i < maxAttempts; i++) {
-          await new Promise(r => setTimeout(r, 15000)); // 每15秒轮询
-          const pollResp = await fetch(`${VIDEO_PROXY}/api/video/status/${result.task_id}`);
+        const start = Date.now();
+        while (Date.now() - start < POLL_MAX_MS) {
+          await new Promise(r => setTimeout(r, POLL_INTERVAL_MS));
+          const pollResp = await fetchWithTimeout(`${VIDEO_PROXY}/api/video/status/${result.task_id}`);
           const pollData = await pollResp.json();
-          console.log('[callJimengVideoMulti] 轮询' + (i+1) + '/' + maxAttempts + ':', pollData.status);
+          console.log('[callJimengVideoMulti] status:', pollData.status, 'progress:', pollData.progress);
           if (pollData.status === 'succeeded') {
             console.log('[callJimengVideoMulti] 成功! video_url:', pollData.video_url);
             return { data: { video_url: pollData.video_url } };
           }
           if (pollData.status === 'failed') {
-            throw new Error('视频生成失败: ' + (pollData.error || 'unknown'));
+            throw new Error(`视频生成失败[failure_code=${pollData.failure_code || 'UNKNOWN'}]: ${pollData.error || ''}`);
           }
-          // running/pending，继续轮询
+          if (onSegmentProgress) onSegmentProgress(pollData.progress || 0);
         }
         throw new Error('视频生成超时，请稍后重试');
       }
@@ -1640,7 +1651,14 @@
         statusSub.textContent = '调用火山方舟';
         progressFill.style.width = '45%';
         
-        const videoResult = await callJimengVideoMulti(segmentTexts, parseInt(STATE.duration));
+        // 进度回调
+        const onSeg = (p) => {
+          const pct = numSegments > 1 ? Math.floor(45 + (p / 100) * 30) : Math.floor(45 + (p / 100) * 30);
+          progressFill.style.width = Math.min(pct, 85) + '%';
+          if (p > 0) statusSub.textContent = `生成中... ${p}%`;
+        };
+
+        const videoResult = await callJimengVideoMulti(segmentTexts, parseInt(STATE.duration), onSeg);
         progressFill.style.width = '75%';
 
         statusText.textContent = '正在进行后期处理...';
@@ -1731,7 +1749,14 @@
         statusSub.textContent = '调用火山方舟';
         progressFill.style.width = '45%';
         
-        const videoResult = await callJimengVideoMulti(segmentTexts, parseInt(STATE.duration));
+        // 进度回调
+        const onSeg = (p) => {
+          const pct = numSegments > 1 ? Math.floor(45 + (p / 100) * 30) : Math.floor(45 + (p / 100) * 30);
+          progressFill.style.width = Math.min(pct, 85) + '%';
+          if (p > 0) statusSub.textContent = `生成中... ${p}%`;
+        };
+
+        const videoResult = await callJimengVideoMulti(segmentTexts, parseInt(STATE.duration), onSeg);
         progressFill.style.width = '75%';
 
         statusText.textContent = '正在进行后期处理...';
