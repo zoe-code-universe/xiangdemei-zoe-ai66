@@ -58,6 +58,31 @@ def options(path=None):
 def health():
     return jsonify({'status': 'ok'})
 
+# ===== DeepSeek API 代理 =====
+DEEPSEEK_KEY = os.environ.get('DEEPSEEK_KEY', '')
+DEEPSEEK_BASE = 'https://api.deepseek.com'
+
+@app.route('/api/deepseek', methods=['POST'])
+def deepseek_proxy():
+    try:
+        if not DEEPSEEK_KEY:
+            return jsonify({'error': 'DEEPSEEK_KEY not configured'}), 500
+        body = request.json or {}
+        body.setdefault('model', 'deepseek-chat')
+        data = json.dumps(body, ensure_ascii=False).encode()
+        req = urllib.request.Request(
+            f'{DEEPSEEK_BASE}/chat/completions',
+            data=data,
+            headers={'Content-Type': 'application/json', 'Authorization': f'Bearer {DEEPSEEK_KEY}'},
+            method='POST'
+        )
+        with urllib.request.urlopen(req, timeout=60, context=ssl._create_unverified_context()) as r:
+            return Response(r.read(), mimetype='application/json')
+    except urllib.error.HTTPError as e:
+        return Response(json.dumps({'error': f'HTTP {e.code}'}), status=e.code, mimetype='application/json')
+    except Exception as e:
+        return Response(json.dumps({'error': str(e)}), status=500, mimetype='application/json')
+
 # ===== 提交任务（立即返回 task_id，后台执行）=====
 @app.route('/api/video/generate', methods=['POST'])
 def generate():
