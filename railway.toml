@@ -1,0 +1,3 @@
+[deploy]
+startCommand = "cd xiangdem/server && python3 video_proxy.py"
+healthCheckPath = "/api/health"
