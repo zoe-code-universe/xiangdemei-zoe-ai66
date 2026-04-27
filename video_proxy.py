@@ -13,7 +13,6 @@ from flask import Flask, request, jsonify, send_file, Response
 app = Flask(__name__)
 
 PORT = int(os.environ.get('PORT', 8080))
-ARK_KEY = os.environ.get('ARK_KEY', '')
 ARK_BASE = 'https://ark.cn-beijing.volces.com'
 MODEL = 'doubao-seedance-2-0-260128'
 TEMP_DIR = tempfile.mkdtemp(prefix='xiangdem_')
@@ -23,6 +22,12 @@ MAX_CONCURRENT = 2
 _task_sem = threading.Semaphore(MAX_CONCURRENT)
 MAX_RETRIES = 5
 BASE_DELAY = 2
+
+def _ark_key():
+    return os.environ.get('ARK_KEY', '')
+
+def _ds_key():
+    return os.environ.get('DEEPSEEK_KEY', '')
 
 # ===== 任务存储（内存 + 文件持久化）=====
 _task_store = {}
@@ -59,13 +64,12 @@ def health():
     return jsonify({'status': 'ok'})
 
 # ===== DeepSeek API 代理 =====
-DEEPSEEK_KEY = os.environ.get('DEEPSEEK_KEY', '')
 DEEPSEEK_BASE = 'https://api.deepseek.com'
 
 @app.route('/api/debug/env', methods=['GET'])
 def debug_env():
-    ark = os.environ.get('ARK_KEY', '')
-    ds = os.environ.get('DEEPSEEK_KEY', '')
+    ark = _ark_key()
+    ds = _ds_key()
     return jsonify({
         'ARK_KEY_len': len(ark),
         'ARK_KEY_masked': ark[:6] + '...' if ark else 'EMPTY',
@@ -75,8 +79,9 @@ def debug_env():
 
 @app.route('/api/deepseek', methods=['POST'])
 def deepseek_proxy():
+    ds = _ds_key()
     try:
-        if not DEEPSEEK_KEY:
+        if not ds:
             return jsonify({'error': 'DEEPSEEK_KEY not configured'}), 500
         body = request.json or {}
         body.setdefault('model', 'deepseek-chat')
@@ -84,7 +89,7 @@ def deepseek_proxy():
         req = urllib.request.Request(
             f'{DEEPSEEK_BASE}/chat/completions',
             data=data,
-            headers={'Content-Type': 'application/json', 'Authorization': f'Bearer {DEEPSEEK_KEY}'},
+            headers={'Content-Type': 'application/json', 'Authorization': f'Bearer {ds}'},
             method='POST'
         )
         with urllib.request.urlopen(req, timeout=60, context=ssl._create_unverified_context()) as r:
@@ -272,7 +277,7 @@ def _ark_submit_with_retry(prompt, duration, retries=MAX_RETRIES):
             req = urllib.request.Request(
                 f'{ARK_BASE}/api/v3/contents/generations/tasks',
                 data=body,
-                headers={'Content-Type': 'application/json', 'Authorization': f'Bearer {ARK_KEY}'},
+                headers={'Content-Type': 'application/json', 'Authorization': f'Bearer {_ark_key()}'},
                 method='POST'
             )
             with urllib.request.urlopen(req, timeout=60, context=ssl._create_unverified_context()) as r:
@@ -313,7 +318,7 @@ def _poll_ark(ark_task_id, timeout=600):
         try:
             req = urllib.request.Request(
                 f'{ARK_BASE}/api/v3/contents/generations/tasks/{ark_task_id}',
-                headers={'Authorization': f'Bearer {ARK_KEY}'},
+                headers={'Authorization': f'Bearer {_ark_key()}'},
                 method='GET'
             )
             with urllib.request.urlopen(req, timeout=30, context=ssl._create_unverified_context()) as r:
@@ -348,12 +353,12 @@ def serve(f):
 # ===== 底层工具 =====
 def ark_submit(prompt, duration):
     body = json.dumps({'model': MODEL, 'content': [{'type': 'text', 'text': prompt}], 'ratio': '16:9', 'duration': duration, 'watermark': False}, ensure_ascii=False).encode()
-    req = urllib.request.Request(f'{ARK_BASE}/api/v3/contents/generations/tasks', data=body, headers={'Content-Type': 'application/json', 'Authorization': f'Bearer {ARK_KEY}'}, method='POST')
+    req = urllib.request.Request(f'{ARK_BASE}/api/v3/contents/generations/tasks', data=body, headers={'Content-Type': 'application/json', 'Authorization': f'Bearer {_ark_key()}'}, method='POST')
     with urllib.request.urlopen(req, timeout=30, context=ssl._create_unverified_context()) as r:
         return json.loads(r.read()).get('id')
 
 def ark_poll(tid):
-    req = urllib.request.Request(f'{ARK_BASE}/api/v3/contents/generations/tasks/{tid}', headers={'Authorization': f'Bearer {ARK_KEY}'}, method='GET')
+    req = urllib.request.Request(f'{ARK_BASE}/api/v3/contents/generations/tasks/{tid}', headers={'Authorization': f'Bearer {_ark_key()}'}, method='GET')
     with urllib.request.urlopen(req, timeout=30, context=ssl._create_unverified_context()) as r:
         t = json.loads(r.read())
         return t.get('status'), (t.get('content') or {}).get('video_url', '')
