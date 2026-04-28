@@ -1277,6 +1277,7 @@
       script: '',
       scriptValid: false,
       imagesConfirmed: false,
+      imagePrompts: [],  // 各镜头对应的增强版插画Prompt
       freeUsed: localStorage.getItem('xd_free_used') === 'true',
       userDeepseekKey: localStorage.getItem('xd_user_deepseek_key') || '',
       userSeedanceKey: localStorage.getItem('xd_user_seedance_key') || ''
@@ -1506,7 +1507,7 @@
           });
           if (!resp.ok) throw new Error(`插画生成请求失败 ${resp.status}`);
           const data = await resp.json();
-          imageTaskIds.push({ task_id: data.task_id, prompt: shot.trim() });
+          imageTaskIds.push({ task_id: data.task_id, prompt: shot.trim(), enhancedPrompt: enhancedPrompt.slice(0, 500) });
           imageStatusText.textContent = `已提交 ${imageTaskIds.length}/${shots.length} 个插画...`;
         }
 
@@ -1524,7 +1525,8 @@
               if (statusData.status === 'succeeded') {
                 images.push({
                   url: statusData.images[0].url,
-                  prompt: item.prompt
+                  prompt: item.prompt,
+                  enhancedPrompt: item.enhancedPrompt || item.prompt
                 });
                 break;
               } else if (statusData.status === 'failed') {
@@ -1796,6 +1798,16 @@
           segmentTexts.push(shots.map(s => s.replace(/时长：\d+秒\n*/g, '').trim()).join(' | ').slice(0, 400));
         }
 
+        // 用插画增强Prompt（如果有插画的话）
+        if (STATE.imagePrompts && STATE.imagePrompts.length > 0) {
+          for (let i = 0; i < segmentTexts.length; i++) {
+            const imgPrompt = STATE.imagePrompts[i % STATE.imagePrompts.length];
+            if (imgPrompt) {
+              segmentTexts[i] = `${segmentTexts[i]}, ${imgPrompt}`;
+            }
+          }
+        }
+
         // 敏感词检测
         for (let i = 0; i < segmentTexts.length; i++) {
           const bad = checkSensitive(segmentTexts[i]);
@@ -1892,6 +1904,16 @@
         } else {
           const shots = STATE.script.split(/【镜头\d+】/).filter(s => s.trim());
           segmentTexts.push(shots.map(s => s.replace(/时长：\d+秒\n*/g, '').trim()).join(' | ').slice(0, 400));
+        }
+
+        // 用插画增强Prompt（如果有插画的话）
+        if (STATE.imagePrompts && STATE.imagePrompts.length > 0) {
+          for (let i = 0; i < segmentTexts.length; i++) {
+            const imgPrompt = STATE.imagePrompts[i % STATE.imagePrompts.length];
+            if (imgPrompt) {
+              segmentTexts[i] = `${segmentTexts[i]}, ${imgPrompt}`;
+            }
+          }
         }
 
         // 敏感词检测
