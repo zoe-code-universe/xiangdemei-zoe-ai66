@@ -27,6 +27,9 @@ def _ark_key():
 def _ds_key():
     return os.environ.get('DEEPSEEK_KEY', '')
 
+def _wanx_key():
+    return os.environ.get('WANXIANG_KEY', '')
+
 # ===== CORS =====
 @app.after_request
 def add_cors(res):
@@ -66,6 +69,98 @@ def deepseek_proxy():
             return Response(r.read(), mimetype='application/json')
     except urllib.error.HTTPError as e:
         return Response(json.dumps({'error': f'HTTP {e.code}'}), status=e.code, mimetype='application/json')
+    except Exception as e:
+        return Response(json.dumps({'error': str(e)}), status=500, mimetype='application/json')
+
+# ===== 通义万相文生图代理 =====
+WANX_BASE = 'https://dashscope.aliyuncs.com'
+
+@app.route('/api/image/generate', methods=['POST'])
+def image_generate():
+    wanx = _wanx_key()
+    if not wanx:
+        return Response(
+            json.dumps({'error': 'WANXIANG_KEY not configured'}), status=500, mimetype='application/json'
+        )
+    try:
+        body = request.json or {}
+        prompt = str(body.get('prompt', ''))
+        if not prompt:
+            return Response(
+                json.dumps({'error': 'prompt is required'}), status=400, mimetype='application/json'
+            )
+        model = body.get('model', 'wanx2.1-t2i-turbo')
+        size = body.get('size', '1024*1024')
+        n = min(int(body.get('n', 1)), 4)
+
+        payload = json.dumps({
+            'model': model,
+            'input': {'prompt': prompt},
+            'parameters': {'size': size, 'n': n}
+        }, ensure_ascii=False).encode()
+
+        req = urllib.request.Request(
+            f'{WANX_BASE}/api/v1/services/aigc/text2image/image-synthesis',
+            data=payload,
+            headers={
+                'Content-Type': 'application/json',
+                'Authorization': f'Bearer {wanx}',
+                'X-DashScope-Async': 'enable'
+            },
+            method='POST'
+        )
+        with urllib.request.urlopen(req, timeout=30, context=ssl._create_unverified_context()) as r:
+            result = json.loads(r.read())
+            task_id = (result.get('output') or {}).get('task_id')
+            if not task_id:
+                return Response(
+                    json.dumps({'error': 'no task_id returned', 'detail': result}), status=500, mimetype='application/json'
+                )
+            return Response(
+                json.dumps({'task_id': task_id, 'status': 'pending'}), mimetype='application/json'
+            )
+    except urllib.error.HTTPError as e:
+        err_body = e.read().decode() if e.fp else ''
+        return Response(
+            json.dumps({'error': f'HTTP {e.code}', 'detail': err_body}),
+            status=e.code, mimetype='application/json'
+        )
+    except Exception as e:
+        return Response(json.dumps({'error': str(e)}), status=500, mimetype='application/json')
+
+@app.route('/api/image/status/<task_id>', methods=['GET'])
+def image_status(task_id):
+    wanx = _wanx_key()
+    if not wanx:
+        return Response(
+            json.dumps({'error': 'WANXIANG_KEY not configured'}), status=500, mimetype='application/json'
+        )
+    try:
+        req = urllib.request.Request(
+            f'{WANX_BASE}/api/v1/tasks/{task_id}',
+            headers={'Authorization': f'Bearer {wanx}'},
+            method='GET'
+        )
+        with urllib.request.urlopen(req, timeout=30, context=ssl._create_unverified_context()) as r:
+            result = json.loads(r.read())
+            output = result.get('output', {})
+            task_status = output.get('task_status', '')
+            if task_status == 'SUCCEEDED':
+                results = output.get('results', [])
+                images = [{'url': item.get('url', ''), 'prompt': item.get('actual_prompt', '')} for item in results]
+                return Response(
+                    json.dumps({'status': 'succeeded', 'images': images}), mimetype='application/json'
+                )
+            elif task_status == 'FAILED':
+                return Response(
+                    json.dumps({'status': 'failed', 'error': output.get('message', 'failed')}),
+                    status=500, mimetype='application/json'
+                )
+            else:
+                return Response(
+                    json.dumps({'status': task_status, 'task_id': task_id}),
+                    mimetype='application/json'
+                )
     except Exception as e:
         return Response(json.dumps({'error': str(e)}), status=500, mimetype='application/json')
 
