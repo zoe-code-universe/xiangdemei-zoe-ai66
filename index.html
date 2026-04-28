@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>想得美 — AI漫剧视频生成</title>
+  <title>想得美 — AI视频生成工具</title>
   <script src="https://cdn.tailwindcss.com"></script>
   <link href="https://fonts.googleapis.com/css2?family=Noto+Sans+SC:wght@300;400;500;700;900&display=swap" rel="stylesheet">
   <style>
@@ -1005,7 +1005,7 @@
       <div class="field-row">
         <div class="field-label">
           <span class="step-badge">①</span>
-          一句话概括你的漫剧故事
+          一句话概括你的视频故事
         </div>
         <textarea id="storyInput" rows="3" maxlength="200" class="text-input" 
           placeholder="例如：穿越到古代的少女凭借现代知识成为女皇"></textarea>
@@ -1016,27 +1016,26 @@
       <div class="field-row">
         <div class="field-label">
           <span class="step-badge">②</span>
-          漫剧故事风格
+          故事叙事风格
         </div>
         <select id="storyStyle" class="select-input">
-          <option value="">请选择故事风格</option>
-          <option value="穿越重生">穿越重生</option>
-          <option value="东方仙侠">东方仙侠</option>
-          <option value="未来科幻">未来科幻</option>
-          <option value="赛博朋克">赛博朋克</option>
-          <option value="甜蜜甜宠">甜蜜甜宠</option>
-          <option value="豪门霸总">豪门霸总</option>
-          <option value="都市日常">都市日常</option>
-          <option value="悬疑推理">悬疑推理</option>
-          <option value="古风权谋">古风权谋</option>
-          <option value="校园青春">校园青春</option>
-          <option value="末世冒险">末世冒险</option>
-          <option value="奇幻异能">奇幻异能</option>
-          <option value="大女主逆袭">大女主逆袭</option>
-          <option value="沙雕搞笑">沙雕搞笑</option>
-          <option value="职场逆袭">职场逆袭</option>
-          <option value="年代怀旧">年代怀旧</option>
-          <option value="灵异志怪">灵异志怪</option>
+          <option value="">请选择叙事风格</option>
+          <option value="昆汀式叙事">昆汀·塔伦蒂诺式（暴力美学、环形叙事、多视角）</option>
+          <option value="诺兰式叙事">克里斯托弗·诺兰式（时间错乱、非线性、烧脑）</option>
+          <option value="张艺谋式叙事">张艺谋式（东方美学、大场面、色彩震撼）</option>
+          <option value="希区柯克式叙事">阿尔弗雷德·希区柯克式（悬疑紧张、心理恐惧）</option>
+          <option value="周星驰式叙事">周星驰式（无厘头喜剧、荒诞现实）</option>
+          <option value="李安式叙事">李安式（细腻情感、文化冲突、深层人性）</option>
+          <option value="斯皮尔伯格式叙事">史蒂文·斯皮尔伯格式（史诗感、史诗叙事）</option>
+          <option value="王家卫式叙事">王家卫式（浪漫主义、慢镜头、霓虹美学）</option>
+          <option value="昆汀式叙事">黑色犯罪、道德模糊、戏剧性对白</option>
+          <option value="诺兰式叙事">心理惊悚、时间游戏、高智商博弈</option>
+          <option value="张艺谋式叙事">历史剧情、东方奇观、色彩交响</option>
+          <option value="姜文式叙事">荒诞现实、讽刺隐喻、英雄悲歌</option>
+          <option value="娄烨式叙事">都市情感、手持摄影、情绪沉浸</option>
+          <option value="贾樟柯式叙事">社会现实、小人物命运、时间重量</option>
+          <option value="吴宇森式叙事">暴力美学、兄弟情义、枪战浪漫</option>
+          <option value="杜琪峰式叙事">黑帮宿命、黑色幽默、风格化构图</option>
         </select>
       </div>
 
@@ -1044,48 +1043,43 @@
       <div class="field-row">
         <div class="field-label">
           <span class="step-badge">③</span>
-          漫剧美术画风
+          导演叙事风格
         </div>
         <select id="artStyle" class="select-input">
-          <option value="">请选择美术画风</option>
-          <option value="国风写实">国风写实</option>
-          <option value="水墨古风">水墨古风</option>
-          <option value="吉卜力日系风">吉卜力日系风</option>
-          <option value="复古像素风">复古像素风</option>
-          <option value="美式漫画风">美式漫画风</option>
-          <option value="标准二次元">标准二次元</option>
-          <option value="Q版卡通">Q版卡通</option>
-          <option value="日系厚涂">日系厚涂</option>
-          <option value="二次元赛博风">二次元赛博风</option>
-          <option value="国风国漫">国风国漫</option>
-          <option value="手绘插画风">手绘插画风</option>
-          <option value="极简扁平风">极简扁平风</option>
-          <option value="港漫复古风">港漫复古风</option>
-          <option value="韩系甜酷风">韩系甜酷风</option>
-          <option value="国潮涂鸦风">国潮涂鸦风</option>
+          <option value="">请选择视觉风格</option>
+          <option value="标准电影感">标准电影感（通用、平衡）</option>
+          <option value="胶片电影感">胶片电影感（复古颗粒、温暖色调）</option>
+          <option value="HDR电影感">HDR电影感（高对比、明暗分明）</option>
+          <option value="赛博朋克视觉">赛博朋克（霓虹、蓝紫、昏暗）</option>
+          <option value="水墨东方视觉">水墨东方（留白、淡雅、禅意）</option>
+          <option value="油画质感">油画质感（笔触、古典、厚重）</option>
+          <option value="动漫视觉">动漫视觉（二次元、日系）</option>
+          <option value="黑白电影感">黑白电影（对比度、戏剧性）</option>
         </select>
         
         <div class="style-tags" id="animeStyleTags">
-          <button class="style-tag" data-style="宫崎骏风格">宫崎骏风格</button>
-          <button class="style-tag" data-style="新海诚风格">新海诚风格</button>
-          <button class="style-tag" data-style="今敏风格">今敏风格</button>
-          <button class="style-tag" data-style="王家卫风格">王家卫风格</button>
-          <button class="style-tag" data-style="韦斯·安德森风格">韦斯·安德森风格</button>
-          <button class="style-tag" data-style="赛博朋克风格">赛博朋克风格</button>
-          <button class="style-tag" data-style="邵氏复古风">邵氏复古风</button>
+          <button class="style-tag" data-style="昆汀风格">昆汀·塔伦蒂诺</button>
+          <button class="style-tag" data-style="诺兰风格">克里斯托弗·诺兰</button>
+          <button class="style-tag" data-style="张艺谋风格">张艺谋</button>
+          <button class="style-tag" data-style="王家卫风格">王家卫</button>
+          <button class="style-tag" data-style="李安风格">李安</button>
+          <button class="style-tag" data-style="希区柯克风格">希区柯克</button>
+          <button class="style-tag" data-style="周星驰风格">周星驰</button>
         </div>
       </div>
 
-      <!-- 步骤4：时长 -->
+      <!-- 步骤4：视频时长 -->
       <div class="field-row">
         <div class="field-label">
           <span class="step-badge">④</span>
-          单集播放时长
+          视频时长
         </div>
         <select id="duration" class="select-input">
-          <option value="30">30秒</option>
-          <option value="60">60秒</option>
-          <option value="120">2分钟</option>
+          <option value="10">10秒（短视频）</option>
+          <option value="15">15秒（标准）</option>
+          <option value="30" selected>30秒（中视频）</option>
+          <option value="60">60秒（长视频）</option>
+          <option value="120">2分钟（完整短片）</option>
           <option value="180">3分钟（上限）</option>
         </select>
         <div class="text-xs mt-2" style="color: var(--text-muted);">系统上限锁定3分钟，不支持超长规格</div>
@@ -1147,7 +1141,7 @@
 
       <!-- 步骤9：生成按钮 -->
       <button id="generateVideoBtn" class="btn-generate hidden" disabled onclick="handleGenerateClick()" style="margin-top: 20px;">
-        🎬 一键生成单集成片
+        🎬 一键生成成片
       </button>
 
       <!-- 生成状态 -->
@@ -1355,6 +1349,9 @@
       });
     }
 
+    // ============ 后端代理地址（必须最先定义）============
+    const VIDEO_PROXY = 'https://thorough-contentment-production-89d3.up.railway.app';
+
     // ============ DeepSeek API（走 Railway 后端代理）============
     async function callDeepSeek(prompt) {
       const response = await fetchWithTimeout(`${VIDEO_PROXY}/api/deepseek`, {
@@ -1363,7 +1360,7 @@
         body: JSON.stringify({
           model: 'deepseek-chat',
           messages: [
-            { role: 'system', content: '你是一个专业的AI动漫分镜头脚本编剧。根据用户提供的故事信息，生成符合规范的漫剧分镜头脚本。输出格式：每个镜头包含镜号、画面描述、台词/旁白、时长估算。请直接输出脚本内容，不要额外解释。' },
+            { role: 'system', content: '你是一个专业的AI视频分镜头脚本编剧。根据用户提供的故事信息，生成符合短视频制作规范的分镜头脚本。输出格式：每个镜头包含镜号、画面描述、台词/旁白、时长估算。请直接输出脚本内容，不要额外解释。' },
             { role: 'user', content: prompt }
           ],
           temperature: 0.7,
@@ -1400,7 +1397,7 @@
           segmentInstruction = `\n\n⚠️ 重要：目标时长${targetDuration}秒，每次生成最多11秒，请拆成${numSegments}个段落，每段约10秒。\n用以下格式明确标注段落：\n\n【段落1】\n（此段画面描述...）\n\n【段落2】\n（此段画面描述...）\n\n依此类推。各段落之间剧情要连贯，但每段可独立生成视频。`;
         }
         
-        const prompt = `请为以下漫剧生成单集分镜头脚本：\n\n- 核心故事：${STATE.story}\n- 故事风格：${STATE.storyStyle}\n- 美术画风：${STATE.artStyle}${animeStyleHint}\n- 时长：${targetDuration}秒${segmentInstruction}\n\n请直接输出分镜头脚本内容，不要任何前缀说明。`;
+        const prompt = `请为以下视频故事生成短视频分镜头脚本：\n\n- 核心故事：${STATE.story}\n- 故事风格：${STATE.storyStyle}\n- 美术画风：${STATE.artStyle}${animeStyleHint}\n- 时长：${targetDuration}秒${segmentInstruction}\n\n请直接输出分镜头脚本内容，不要任何前缀说明。`;
         
         STATE.script = await callDeepSeek(prompt);
         scriptContent.value = STATE.script;
@@ -1589,8 +1586,7 @@
       imagePanel.classList.add('hidden');
     }
 
-    // ============ 视频生成API（走本地代理避免CORS）============
-    const VIDEO_PROXY = 'https://thorough-contentment-production-89d3.up.railway.app';
+    // ============ 视频生成API（走Railway后端代理）============
     const FETCH_TIMEOUT_MS = 30000;   // fetch 单次超时 30 秒
     const POLL_INTERVAL_MS = 4000;    // 轮询间隔 4 秒
     const POLL_MAX_MS = 600000;        // 总轮询超时 10 分钟
