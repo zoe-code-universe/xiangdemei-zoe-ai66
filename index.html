@@ -1111,10 +1111,39 @@
         <button id="checkScriptBtn" class="btn-secondary" disabled onclick="checkScript()">
           🔍 AI分镜头逻辑检查
         </button>
-      </div>
 
-      <!-- 步骤8：校验结果 -->
-      <div id="checkResult" class="hidden"></div>
+        <!-- 步骤7：生成分镜插画 -->
+        <button id="generateImageBtn" class="btn-secondary hidden" disabled onclick="generateIllustrations()" style="margin-top: 12px;">
+          🎨 生成分镜插画（让客户预览画面）
+        </button>
+
+        <!-- 插画展示区 -->
+        <div id="imagePanel" class="hidden" style="margin-top: 16px;">
+          <div class="script-panel">
+            <div class="script-header">
+              <div class="script-header-left">
+                <span class="step-badge">⑦</span>
+                <span class="script-header-label">漫画分镜头插画</span>
+              </div>
+              <div class="script-header-right" id="imageStatusText" style="font-size: 12px; color: var(--text-muted);"></div>
+            </div>
+            <div id="imageGrid" style="display: grid; grid-template-columns: repeat(auto-fill, minmax(180px, 1fr)); gap: 12px; margin-top: 12px;">
+              <!-- 插画卡片将动态插入 -->
+            </div>
+          </div>
+          <div id="imageConfirmSection" class="hidden" style="margin-top: 12px; padding: 12px; border: 1px solid var(--border-color); border-radius: 8px; background: var(--bg-secondary);">
+            <div style="display: flex; align-items: center; gap: 8px; margin-bottom: 8px;">
+              <span style="font-size: 14px;">🎯 客户确认：</span>
+            </div>
+            <div style="display: flex; gap: 8px;">
+              <button id="confirmImageBtn" class="btn-secondary" style="flex: 1;" onclick="confirmImages()">✅ 确认插画，继续生成视频</button>
+              <button id="rejectImageBtn" class="btn-secondary" style="flex: 1; background: var(--btn-danger); color: white; border-color: var(--btn-danger);" onclick="rejectImages()">❌ 需要重新调整</button>
+            </div>
+          </div>
+        </div>
+
+        <!-- 步骤8：校验结果 -->
+        <div id="checkResult" class="hidden"></div>
 
       <!-- 步骤9：生成按钮 -->
       <button id="generateVideoBtn" class="btn-generate hidden" disabled onclick="handleGenerateClick()" style="margin-top: 20px;">
@@ -1253,6 +1282,7 @@
       duration: '30',
       script: '',
       scriptValid: false,
+      imagesConfirmed: false,
       freeUsed: localStorage.getItem('xd_free_used') === 'true',
       userDeepseekKey: localStorage.getItem('xd_user_deepseek_key') || '',
       userSeedanceKey: localStorage.getItem('xd_user_seedance_key') || ''
@@ -1375,6 +1405,8 @@
         STATE.script = await callDeepSeek(prompt);
         scriptContent.value = STATE.script;
         document.getElementById('checkScriptBtn').disabled = false;
+        document.getElementById('generateImageBtn').classList.remove('hidden');
+        document.getElementById('generateImageBtn').disabled = false;
         btn.textContent = '🤖 AI自动生成分镜头脚本';
         btn.disabled = false;
         updateStepIndicator();
@@ -1422,6 +1454,139 @@
         btn.textContent = '🔍 AI分镜头逻辑检查';
         btn.disabled = false;
       }
+    }
+
+    // ============ 漫画分镜插画生成 =============
+    const IMAGE_PROXY = VIDEO_PROXY;  // 共用同一个后端代理
+
+    async function generateIllustrations() {
+      // 同步用户可能手动修改的脚本内容
+      const scriptText = document.getElementById('scriptContent').value;
+      STATE.script = scriptText;
+
+      const btn = document.getElementById('generateImageBtn');
+      btn.disabled = true;
+      btn.textContent = '⏳ AI正在生成插画...';
+
+      const imagePanel = document.getElementById('imagePanel');
+      const imageGrid = document.getElementById('imageGrid');
+      const imageStatusText = document.getElementById('imageStatusText');
+      const confirmSection = document.getElementById('imageConfirmSection');
+
+      imagePanel.classList.remove('hidden');
+      imageGrid.innerHTML = '<div class="shimmer-block" style="height: 200px;"></div>';
+      imageStatusText.textContent = '正在生成，请稍候...';
+      confirmSection.classList.add('hidden');
+
+      try {
+        // 从脚本中解析每个分镜的描述，用于生成对应插画
+        const prompt = `请从以下分镜头脚本中提取每个镜头的画面描述（提取每个"镜头"或"画面"后的核心描述，保留场景、人物、动作、氛围等关键信息）。直接输出，每行一个镜头描述，不要编号，不要前缀，格式：\n\n镜头1描述\n镜头2描述\n\n脚本如下：\n${scriptText}`;
+
+        const shotDescriptions = await callDeepSeek(prompt);
+        const shots = shotDescriptions.split('\n').filter(line => line.trim().length > 5).slice(0, 8);
+
+        if (shots.length === 0) {
+          throw new Error('无法从脚本中提取有效的镜头描述');
+        }
+
+        imageStatusText.textContent = `共 ${shots.length} 个镜头，开始生成插画...`;
+        const artStyle = STATE.artStyle || '';
+        const animeStyleHint = STATE.animeStyle ? `, ${STATE.animeStyle} style` : '';
+        const styleSuffix = artStyle ? `, ${artStyle} art style${animeStyleHint}` : ', manga style';
+
+        const imageTaskIds = [];
+        for (const shot of shots) {
+          const enhancedPrompt = `${shot.trim()}${styleSuffix}, comic panel style, detailed linework, vibrant colors`;
+          const resp = await fetchWithTimeout(`${IMAGE_PROXY}/api/image/generate`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              prompt: enhancedPrompt.slice(0, 500),
+              model: 'wanx2.1-t2i-turbo',
+              size: '1024*1024',
+              n: 1
+            })
+          });
+          if (!resp.ok) throw new Error(`插画生成请求失败 ${resp.status}`);
+          const data = await resp.json();
+          imageTaskIds.push({ task_id: data.task_id, prompt: shot.trim() });
+          imageStatusText.textContent = `已提交 ${imageTaskIds.length}/${shots.length} 个插画...`;
+        }
+
+        imageStatusText.textContent = '插画生成中，请等待完成...';
+
+        // 轮询所有任务直到完成
+        const images = [];
+        for (const item of imageTaskIds) {
+          let retries = 20;
+          while (retries-- > 0) {
+            await new Promise(r => setTimeout(r, 3000));
+            try {
+              const statusResp = await fetchWithTimeout(`${IMAGE_PROXY}/api/image/status/${item.task_id}`);
+              const statusData = await statusResp.json();
+              if (statusData.status === 'succeeded') {
+                images.push({
+                  url: statusData.images[0].url,
+                  prompt: item.prompt
+                });
+                break;
+              } else if (statusData.status === 'failed') {
+                images.push({ url: '', prompt: item.prompt, error: statusData.error });
+                break;
+              }
+            } catch (e) {
+              // 继续轮询
+            }
+          }
+        }
+
+        // 渲染插画网格
+        imageGrid.innerHTML = '';
+        let successCount = 0;
+        for (const img of images) {
+          const card = document.createElement('div');
+          card.style.cssText = 'border: 1px solid var(--border-color); border-radius: 8px; overflow: hidden; background: var(--bg-secondary);';
+          if (img.error) {
+            card.innerHTML = `<div style="padding:12px; font-size:12px; color:#ef4444;">❌ ${img.error}</div>`;
+          } else {
+            card.innerHTML = `<img src="${img.url}" style="width:100%;display:block;" loading="lazy" />`;
+            successCount++;
+          }
+          imageGrid.appendChild(card);
+        }
+
+        imageStatusText.textContent = `已完成 ${successCount}/${images.length} 张插画`;
+        if (successCount > 0) {
+          confirmSection.classList.remove('hidden');
+          STATE.imagesConfirmed = false;
+        }
+
+        btn.textContent = '🎨 生成分镜插画（让客户预览画面）';
+        btn.disabled = false;
+      } catch (error) {
+        imageGrid.innerHTML = `<div style="padding:16px;color:#ef4444;font-size:13px;">❌ 生成失败：${error.message}</div>`;
+        imageStatusText.textContent = '';
+        btn.textContent = '🎨 生成分镜插画（让客户预览画面）';
+        btn.disabled = false;
+      }
+    }
+
+    function confirmImages() {
+      STATE.imagesConfirmed = true;
+      const confirmSection = document.getElementById('imageConfirmSection');
+      const confirmBtn = document.getElementById('confirmImageBtn');
+      confirmBtn.textContent = '✅ 已确认插画';
+      confirmBtn.disabled = true;
+      const rejectBtn = document.getElementById('rejectImageBtn');
+      rejectBtn.disabled = true;
+      // 隐藏"需要重新调整"按钮
+      document.getElementById('rejectImageBtn').style.display = 'none';
+    }
+
+    function rejectImages() {
+      STATE.imagesConfirmed = false;
+      const imagePanel = document.getElementById('imagePanel');
+      imagePanel.classList.add('hidden');
     }
 
     // ============ 视频生成API（走本地代理避免CORS）============
