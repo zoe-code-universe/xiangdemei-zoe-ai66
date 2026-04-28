@@ -28,7 +28,7 @@ def _ds_key():
     return os.environ.get('DEEPSEEK_KEY', '')
 
 def _wanx_key():
-    return os.environ.get('WANXIANG_KEY', '')
+    return os.environ.get('WANXIANG_KEY', '').strip()
 
 # ===== CORS =====
 @app.after_request
