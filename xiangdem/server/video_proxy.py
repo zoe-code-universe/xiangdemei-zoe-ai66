@@ -13,7 +13,7 @@ app = Flask(__name__)
 
 PORT = int(os.environ.get('PORT', 8080))
 ARK_BASE = 'https://ark.cn-beijing.volces.com'
-MODEL = 'doubao-seedance-1.5-pro'
+MODEL = 'doubao-seedance-2-0-260128'
 TEMP_DIR = tempfile.mkdtemp(prefix='xiangdem_')
 
 MAX_CONCURRENT = 2
