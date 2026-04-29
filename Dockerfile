@@ -1,3 +1,4 @@
+# Build: 2026-04-29-2059 - force rebuild with fresh apt cache
 FROM python:3.11-slim
 
 RUN apt-get update && apt-get install -y ffmpeg && rm -rf /var/lib/apt/lists/*
