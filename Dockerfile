@@ -2,8 +2,7 @@ FROM python:3.11-slim
 
 RUN apt-get update && apt-get install -y ffmpeg && rm -rf /var/lib/apt/lists/*
 
-WORKDIR /app
-
+WORKDIR /app/xiangdem/server
 COPY requirements.txt .
 RUN pip install --no-cache-dir -r requirements.txt
 
@@ -12,5 +11,4 @@ COPY . .
 ENV PORT=8080
 EXPOSE 8080
 
-# 启动时cd到server目录执行（兼容Railway的startCommand）
-CMD ["sh", "-c", "cd xiangdem/server && python3 video_proxy.py"]
+CMD ["python3", "video_proxy.py"]
