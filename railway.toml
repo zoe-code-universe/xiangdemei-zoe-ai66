@@ -3,6 +3,7 @@ engine = "image"
 
 [build]
 dockerfilePath = "Dockerfile"
+# Rebuild trigger: 2026-04-29
 
 [deploy]
 startCommand = "python3 video_proxy.py"
