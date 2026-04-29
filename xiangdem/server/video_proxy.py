@@ -19,6 +19,11 @@ PORT = int(os.environ.get('PORT', 8080))
 ARK_BASE = 'https://ark.cn-beijing.volces.com'
 MODEL = 'doubao-seedance-2-0-260128'
 TEMP_DIR = tempfile.mkdtemp(prefix='xiangdem_')
+# Railway 容器内无法通过 localhost 对外提供静态文件服务
+# 使用 RAILWAY_PUBLIC_DOMAIN 环境变量构建对外可访问的URL
+PUBLIC_HOST = os.environ.get('RAILWAY_PUBLIC_DOMAIN', '').rstrip('/')
+if not PUBLIC_HOST:
+    PUBLIC_HOST = os.environ.get('PUBLIC_URL', '').rstrip('/')
 
 MAX_CONCURRENT = 2
 MAX_TASK_AGE_SECONDS = 3600  # 1小时后清理过期任务
@@ -290,7 +295,7 @@ def _bg_generate_long(task_id, segments, num):
                 for f in seg_files:
                     try: os.remove(f)
                     except: pass
-                video_url = f'http://localhost:{PORT}/api/video/serve/{out}'
+                video_url = f'{PUBLIC_HOST}/api/video/serve/{out}' if PUBLIC_HOST else seg_urls[0]
             else:
                 # ffmpeg失败时降级：直接返回第一段的URL
                 print(f'[_bg_generate_long] ffmpeg concat failed, degrading to first segment', flush=True)
