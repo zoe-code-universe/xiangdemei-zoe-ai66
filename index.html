@@ -762,10 +762,67 @@
     }
     
     .btn-download:hover {
-      transform: translateY(-2px);
-      box-shadow: 0 8px 24px rgba(212, 175, 55, 0.35);
+      transform: translateY(-1px) scale(1.02);
+      box-shadow: 0 6px 24px var(--accent-glow);
     }
-    
+    .btn-download:active { transform: scale(0.97); }
+
+    .btn-download-all {
+      display: inline-flex;
+      align-items: center;
+      gap: 8px;
+      padding: 10px 20px;
+      background: linear-gradient(135deg, var(--accent-dark), var(--accent));
+      color: #fff;
+      border: none;
+      border-radius: 10px;
+      font-size: 14px;
+      font-weight: 600;
+      cursor: pointer;
+      transition: all 0.2s cubic-bezier(0.34, 1.56, 0.64, 1);
+      box-shadow: 0 4px 16px var(--accent-glow);
+    }
+    .btn-download-all:hover { transform: translateY(-1px) scale(1.02); box-shadow: 0 6px 24px var(--accent-glow); }
+    .btn-download-all:active { transform: scale(0.97); }
+    .btn-download-all.hidden { display: none; }
+
+    .segments-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fill, minmax(180px, 1fr));
+      gap: 12px;
+      margin-bottom: 16px;
+    }
+    .segment-card {
+      background: var(--bg-elevated);
+      border: 1px solid var(--border-subtle);
+      border-radius: 12px;
+      padding: 12px;
+      display: flex;
+      flex-direction: column;
+      gap: 8px;
+      transition: border-color 0.25s, box-shadow 0.25s;
+    }
+    .segment-card:hover { border-color: var(--accent); box-shadow: 0 0 12px var(--accent-glow); }
+    .segment-label { font-size: 12px; color: var(--text-muted); font-weight: 600; }
+    .segment-meta { font-size: 11px; color: var(--text-secondary); }
+    .segment-download-btn {
+      display: inline-flex; align-items: center; justify-content: center; gap: 6px;
+      padding: 7px 12px;
+      background: rgba(167, 139, 250, 0.15);
+      border: 1px solid var(--border-accent);
+      border-radius: 8px;
+      color: var(--accent-light);
+      font-size: 12px; font-weight: 600;
+      cursor: pointer; text-decoration: none;
+      transition: all 0.2s;
+    }
+    .segment-download-btn:hover { background: rgba(167, 139, 250, 0.3); box-shadow: 0 0 10px var(--accent-glow); }
+    .badge-pending { background: rgba(148, 163, 184, 0.2); color: var(--text-muted); }
+    .badge-generating { background: rgba(234, 179, 8, 0.2); color: #eab308; }
+    .badge-done { background: rgba(34, 197, 94, 0.2); color: #22c55e; }
+    .badge-failed { background: rgba(239, 68, 68, 0.2); color: #ef4444; }
+    .segment-pending, .segment-generating { opacity: 0.6; }
+
     .btn-reset {
       flex: 1;
       padding: 16px;
@@ -1177,8 +1234,11 @@
           <span id="videoPlaceholder" class="video-placeholder-text">视频预览区域</span>
           <video id="resultVideo" class="video-element hidden" controls></video>
         </div>
+        <!-- 片段下载区 -->
+        <div id="segmentsGrid" class="segments-grid"></div>
         <div class="result-actions">
-          <button class="btn-download" onclick="downloadVideo()">📥 下载视频</button>
+          <button id="downloadAllBtn" class="btn-download-all hidden" onclick="downloadAllSegments()">📥 下载全部片段</button>
+          <button class="btn-download" onclick="downloadVideo()">📥 下载当前</button>
           <button class="btn-reset" onclick="resetForm()">🔄 重新生成</button>
         </div>
       </div>
@@ -1679,15 +1739,15 @@
       if (segmentTexts.length === 1) {
         return callJimengVideo(segmentTexts[0], totalDuration, onSegmentProgress);
       }
-      console.log('[callJimengVideoMulti] 开始分段生成', segmentTexts.length, '段');
+      console.log('[callJimengVideoMulti] 开始多段生成', segmentTexts.length, '段, 总时长', totalDuration, '秒');
       
-      // 调用多段生成接口
-      const resp = await fetchWithTimeout(`${VIDEO_PROXY}/api/video/generate-long`, {
+      // 调用新的auto接口，自动分镜头
+      const resp = await fetchWithTimeout(`${VIDEO_PROXY}/api/video/generate-auto`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
-          segments: segmentTexts.map(p => ({ prompt: p, duration: 10 })),
-          total_duration: totalDuration
+          prompt: segmentTexts.join(' | '),
+          duration: parseInt(totalDuration)
         })
       });
       
@@ -1700,34 +1760,48 @@
       const result = await resp.json();
       console.log('[callJimengVideoMulti] 响应:', result);
       
-      // 异步模式：等待任务完成
-      if (result.task_id) {
-        console.log('[callJimengVideoMulti] 异步任务ID:', result.task_id, '开始轮询...');
-        const start = Date.now();
-        while (Date.now() - start < POLL_MAX_MS) {
-          await new Promise(r => setTimeout(r, POLL_INTERVAL_MS));
-          const pollResp = await fetchWithTimeout(`${VIDEO_PROXY}/api/video/status/${result.task_id}`);
-          const pollData = await pollResp.json();
-          console.log('[callJimengVideoMulti] status:', pollData.status, 'progress:', pollData.progress);
-          if (pollData.status === 'succeeded') {
-            console.log('[callJimengVideoMulti] 成功! video_url:', pollData.video_url);
-            return { data: { video_url: pollData.video_url } };
-          }
-          if (pollData.status === 'failed') {
-            throw new Error(`视频生成失败[failure_code=${pollData.failure_code || 'UNKNOWN'}]: ${pollData.error || ''}`);
-          }
-          if (onSegmentProgress) onSegmentProgress(pollData.progress || 0);
-        }
-        throw new Error('视频生成超时，请稍后重试');
+      if (!result.task_id) {
+        throw new Error('接口返回异常，缺少task_id: ' + JSON.stringify(result));
       }
       
-      if (result.status === 'succeeded') {
-        return { data: { video_url: result.video_url, segments: result.segments } };
-      } else if (result.error) {
-        throw new Error(result.error);
-      } else {
-        throw new Error('分段生成接口返回异常: ' + JSON.stringify(result));
+      const taskId = result.task_id;
+      const totalSeg = result.total_segments || segmentTexts.length;
+      console.log('[callJimengVideoMulti] 任务ID:', taskId, '总片段:', totalSeg, '开始轮询...');
+      
+      // 异步轮询，实时获取每段URL
+      const start = Date.now();
+      let lastSegments = [];
+      while (Date.now() - start < POLL_MAX_MS) {
+        await new Promise(r => setTimeout(r, POLL_INTERVAL_MS));
+        const pollResp = await fetchWithTimeout(`${VIDEO_PROXY}/api/video/status/${taskId}`);
+        const pollData = await pollResp.json();
+        
+        const done = pollData.done_segments || 0;
+        const pct = Math.floor((done / totalSeg) * 100);
+        if (onSegmentProgress) onSegmentProgress(pct);
+        
+        // 实时更新片段状态（showResult支持中途渲染）
+        if (pollData.segments && JSON.stringify(pollData.segments) !== JSON.stringify(lastSegments)) {
+          lastSegments = pollData.segments;
+          renderSegmentsGrid(pollData.segments,
+            document.getElementById('resultVideo'),
+            document.getElementById('videoPlaceholder'));
+        }
+        
+        if (pollData.status === 'succeeded') {
+          console.log('[callJimengVideoMulti] 全部成功!');
+          // 最后一轮更新，拿到所有URL
+          const finalResp = await fetchWithTimeout(`${VIDEO_PROXY}/api/video/status/${taskId}`);
+          const finalData = await finalResp.json();
+          const segs = finalData.segments || [];
+          const firstUrl = segs.find(s => s.status === 'succeeded')?.ark_url || '';
+          return { data: { video_url: firstUrl, segments: segs } };
+        }
+        if (pollData.status === 'failed') {
+          throw new Error(`视频生成失败: ${pollData.error || ''}`);
+        }
       }
+      throw new Error('视频生成超时，请稍后重试');
     }
 
     function handleGenerateClick() {
@@ -1978,8 +2052,8 @@
       const resultPanel = document.getElementById('resultPanel');
       const videoPlaceholder = document.getElementById('videoPlaceholder');
       const resultVideo = document.getElementById('resultVideo');
-      
-      console.log('[showResult] DOM check - resultPanel:', !!resultPanel, 'resultVideo:', !!resultVideo);
+      const segmentsGrid = document.getElementById('segmentsGrid');
+      const downloadAllBtn = document.getElementById('downloadAllBtn');
       
       if (!resultPanel) { console.error('[showResult] resultPanel is null!'); return; }
       resultPanel.classList.remove('hidden');
@@ -1987,22 +2061,81 @@
       if (resultVideo) resultVideo.classList.add('hidden');
       
       const videoUrl = videoResult?.data?.video_url;
-      console.log('[showResult] videoUrl:', videoUrl ? videoUrl.slice(0, 50) : 'EMPTY');
+      const segments = videoResult?.data?.segments;
       
-      if (videoUrl) {
-        if (videoPlaceholder) videoPlaceholder.style.display = 'none';
-        resultVideo.src = videoUrl;
-        resultVideo.classList.remove('hidden');
-        console.log('[showResult] 视频已设置到video元素');
+      // 渲染片段下载网格
+      if (segments && segments.length > 0) {
+        renderSegmentsGrid(segments, resultVideo, videoPlaceholder);
+        downloadAllBtn.classList.remove('hidden');
       } else {
-        console.error('[showResult] video_url为空!');
-        if (resultVideo) {
-          resultVideo.src = '';
-          resultVideo.classList.add('hidden');
+        segmentsGrid.innerHTML = '';
+        downloadAllBtn.classList.add('hidden');
+        if (videoUrl) {
+          if (videoPlaceholder) videoPlaceholder.style.display = 'none';
+          resultVideo.src = videoUrl;
+          resultVideo.classList.remove('hidden');
         }
       }
       
       resultPanel.scrollIntoView({ behavior: 'smooth', block: 'center' });
+    }
+
+    function renderSegmentsGrid(segments, resultVideo, videoPlaceholder) {
+      const segmentsGrid = document.getElementById('segmentsGrid');
+      const downloadAllBtn = document.getElementById('downloadAllBtn');
+      let html = '';
+      
+      STATE.downloadSegments = []; // 存储所有片段URL供下载全部使用
+      
+      segments.forEach((seg, i) => {
+        const badgeClass = seg.status === 'succeeded' ? 'badge-done'
+                        : seg.status === 'failed' ? 'badge-failed'
+                        : seg.status === 'running' ? 'badge-generating' : 'badge-pending';
+        const badgeText = seg.status === 'succeeded' ? '✓ 可下载'
+                        : seg.status === 'failed' ? '✗ 失败'
+                        : seg.status === 'running' ? '生成中' : '等待';
+        const cardClass = seg.status === 'pending' ? 'segment-card segment-pending'
+                        : seg.status === 'running' ? 'segment-card segment-generating' : 'segment-card';
+        
+        const arkUrl = seg.ark_url || '';
+        if (arkUrl) STATE.downloadSegments.push(arkUrl);
+        
+        const dlBtn = arkUrl
+          ? `<a class="segment-download-btn" href="${arkUrl}" target="_blank" download="想得美_片段${i+1}.mp4">📥 下载片段${i+1}</a>`
+          : `<span class="segment-download-btn" style="opacity:0.4;cursor:not-allowed;">📥 生成中...</span>`;
+        
+        html += `<div class="${cardClass}">
+          <span class="segment-label">片段 ${i+1}</span>
+          <span class="segment-meta">${seg.duration || 10}秒 · <span class="segment-badge ${badgeClass}">${badgeText}</span></span>
+          ${dlBtn}
+        </div>`;
+      });
+      
+      segmentsGrid.innerHTML = html;
+      
+      // 第一个成功的片段自动播放
+      const firstDone = segments.find(s => s.status === 'succeeded' && s.ark_url);
+      if (firstDone) {
+        if (videoPlaceholder) videoPlaceholder.style.display = 'none';
+        resultVideo.src = firstDone.ark_url;
+        resultVideo.classList.remove('hidden');
+      }
+    }
+
+    function downloadAllSegments() {
+      const segs = STATE.downloadSegments || [];
+      if (segs.length === 0) { alert('暂无可下载的片段'); return; }
+      segs.forEach((url, i) => {
+        setTimeout(() => {
+          const a = document.createElement('a');
+          a.href = url;
+          a.download = `想得美_片段${i+1}.mp4`;
+          a.target = '_blank';
+          document.body.appendChild(a);
+          a.click();
+          document.body.removeChild(a);
+        }, i * 800); // 每800ms触发一个下载，避免浏览器阻止
+      });
     }
 
     function downloadVideo() {
@@ -2035,7 +2168,10 @@
       document.getElementById('scriptPanel').classList.add('hidden');
       document.getElementById('checkResult').classList.add('hidden');
       document.getElementById('resultPanel').classList.add('hidden');
+      document.getElementById('segmentsGrid').innerHTML = '';
+      document.getElementById('downloadAllBtn').classList.add('hidden');
       document.getElementById('generateVideoBtn').classList.add('hidden');
+      if (STATE.downloadSegments) STATE.downloadSegments = [];
       document.getElementById('generateScriptBtn').disabled = true;
       document.getElementById('checkScriptBtn').disabled = true;
 
