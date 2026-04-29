@@ -24,6 +24,9 @@ TEMP_DIR = tempfile.mkdtemp(prefix='xiangdem_')
 PUBLIC_HOST = os.environ.get('RAILWAY_PUBLIC_DOMAIN', '').rstrip('/')
 if not PUBLIC_HOST:
     PUBLIC_HOST = os.environ.get('PUBLIC_URL', '').rstrip('/')
+# Railway 容器重建后上述环境变量可能为空，使用部署地址硬编码兜底
+if not PUBLIC_HOST:
+    PUBLIC_HOST = 'https://thorough-contentment-production-89d3.up.railway.app'
 
 MAX_CONCURRENT = 2
 MAX_TASK_AGE_SECONDS = 3600  # 1小时后清理过期任务
