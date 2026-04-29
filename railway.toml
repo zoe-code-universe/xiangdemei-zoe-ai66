@@ -5,6 +5,5 @@ engine = "image"
 dockerfilePath = "Dockerfile"
 
 [deploy]
-preDeployCommand = "apt-get update && apt-get install -y ffmpeg"
-startCommand = "cd xiangdem/server && python3 video_proxy.py"
+startCommand = "python3 video_proxy.py"
 healthCheckPath = "/api/health"
