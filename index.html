@@ -1615,42 +1615,73 @@
       videoBtn.disabled = true;
 
       try {
-        // 直接使用用户输入的故事+风格构建视频生成prompt
-        const storyText = STATE.story;
+        const storyText = STATE.story.trim();
         const totalDuration = parseInt(STATE.duration);
-        const numSegments = totalDuration > 11 ? Math.ceil(totalDuration / 10) : 1;
 
-        statusText.textContent = '正在整理视频描述...';
-        statusSub.textContent = numSegments > 1 ? `将拆分为${numSegments}段生成` : '准备生成视频';
-        progressFill.style.width = '15%';
+        // ========== 镜头数上限（新标准）==========
+        let maxShots = 3;
+        if (totalDuration <= 10) maxShots = 2;
+        else if (totalDuration <= 15) maxShots = 2;
+        else if (totalDuration <= 30) maxShots = 3;
+        else if (totalDuration <= 60) maxShots = 5;
+        else if (totalDuration <= 120) maxShots = 8;
+        else maxShots = 12;
 
-        // 构建完整的视频生成prompt（风格+故事）
-        const videoPrompt = `${STATE.storyStyle}风格，${STATE.artStyle}画风，${storyText}`;
+        statusText.textContent = '正在拆分镜头...';
+        statusSub.textContent = `目标${totalDuration}秒，最多${maxShots}个镜头`;
+        progressFill.style.width = '5%';
 
-        // 按 " | " 分割为多段（如果需要）
-        const rawSegs = [s.strip() for s in videoPrompt.split(' | ') if s.trim()];
-        const segmentTexts = rawSegs.length > 0 ? rawSegs : [videoPrompt];
+        // ========== 自动拆分镜头（三步走）==========
+        // 步骤1：文本拆分——按「。！？」拆分为语句块
+        const sentences = storyText.split(/[。！？]/).filter(s => s.trim().length > 3);
+        if (sentences.length === 0) sentences.push(storyText); // 不足一句则整段为一句
 
-        // 镜头数校验（对第一段进行敏感词检测）
-        const bad = checkSensitive(segmentTexts[0]);
-        if (bad.length > 0) {
-          genPanel.innerHTML = `<div style="padding:24px;color:#fbbf24;">⚠️ 提示词含敏感词：${bad.join(', ')}<br><br>请修改故事内容后重试。</div>`;
-          videoBtn.disabled = false;
-          return;
+        // 步骤2：镜头分配——合并语句块为 maxShots 个镜头
+        const shotTexts = [];
+        const totalSentences = sentences.length;
+        let s = 0;
+        for (let i = 0; i < maxShots && s < totalSentences; i++) {
+          const sentencesPerShot = Math.ceil((totalSentences - s) / (maxShots - i));
+          const group = sentences.slice(s, s + sentencesPerShot).join('。');
+          shotTexts.push(group || storyText);
+          s += sentencesPerShot;
         }
 
-        progressFill.style.width = '30%';
-        statusText.textContent = numSegments > 1 ? `正在生成第1/${numSegments}段视频...` : '正在生成视频...';
+        // 步骤3：镜头标准化——补充「场景+核心动作」
+        const stylePrefix = STATE.storyStyle + '风格，' + STATE.artStyle + '画风，';
+        const standardizedShots = shotTexts.map((shot, i) => {
+          const trimmed = shot.trim();
+          // 如果镜头描述已经有场景词，不重复添加
+          if (trimmed.includes('【场景') || trimmed.includes('场景：')) {
+            return stylePrefix + trimmed;
+          }
+          return stylePrefix + '【镜头' + (i + 1) + '】' + trimmed;
+        });
+
+        progressFill.style.width = '15%';
+
+        // 敏感词检测（对每个镜头）
+        for (let i = 0; i < standardizedShots.length; i++) {
+          const bad = checkSensitive(standardizedShots[i]);
+          if (bad.length > 0) {
+            genPanel.innerHTML = '<div style="padding:24px;color:#fbbf24;">⚠️ 第' + (i+1) + '个镜头含敏感词：' + bad.join(', ') + '<br><br>请修改故事内容后重试。</div>';
+            videoBtn.disabled = false;
+            return;
+          }
+        }
+
+        // ========== 多段视频生成 ==========
+        const numSegments = standardizedShots.length;
+        statusText.textContent = numSegments > 1 ? '正在生成第1/' + numSegments + '段视频...' : '正在生成视频...';
         statusSub.textContent = '调用火山方舟';
-        progressFill.style.width = '45%';
 
         const onSeg = (p) => {
           const pct = numSegments > 1 ? Math.floor(45 + (p / 100) * 30) : Math.floor(45 + (p / 100) * 30);
           progressFill.style.width = Math.min(pct, 85) + '%';
-          if (p > 0) statusSub.textContent = `生成中... ${p}%`;
+          if (p > 0) statusSub.textContent = '生成中... ' + p + '%';
         };
 
-        const videoResult = await callJimengVideoMulti(segmentTexts, totalDuration, onSeg);
+        const videoResult = await callJimengVideoMulti(standardizedShots, totalDuration, onSeg);
         progressFill.style.width = '75%';
         statusText.textContent = '正在进行后期处理...';
         progressFill.style.width = '90%';
@@ -1666,11 +1697,10 @@
         genPanel.classList.add('hidden');
       } catch (error) {
         console.error('[generateVideoWithPlatformKey]', error);
-        genPanel.innerHTML = `<div style="padding:24px;color:#f85149;">❌ 生成失败：${error.message}<br><br><button onclick="document.getElementById('generateVideoBtn').disabled=false;genPanel.classList.add('hidden');" style="padding:8px 16px;background:#a78bfa;color:#fff;border:none;border-radius:8px;cursor:pointer;">返回重试</button></div>`;
+        genPanel.innerHTML = '<div style="padding:24px;color:#f85149;">❌ 生成失败：' + error.message + '<br><br><button onclick="document.getElementById(\'generateVideoBtn\').disabled=false;genPanel.classList.add(\'hidden\');" style="padding:8px 16px;background:#a78bfa;color:#fff;border:none;border-radius:8px;cursor:pointer;">返回重试</button></div>';
         videoBtn.disabled = false;
       }
     }
->
   </script>
 </body>
 </html>
