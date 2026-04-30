@@ -1412,10 +1412,12 @@
     });
 
     function validateForm() {
+      console.log('[validateForm] story="' + STATE.story.slice(0,20) + '" style=' + STATE.storyStyle + ' art=' + STATE.artStyle);
       const hasStory = STATE.story.trim().length > 0;
       const hasStyle = STATE.storyStyle !== '';
       const hasArt = STATE.artStyle !== '';
       const canGenerate = hasStory && hasStyle && hasArt;
+      console.log('[validateForm] canGenerate=' + canGenerate + ' btn.disabled=' + !canGenerate);
       document.getElementById('generateScriptBtn').disabled = !canGenerate;
 
       // 调试面板更新
@@ -1478,6 +1480,7 @@
     }
 
     async function generateScript() {
+      console.log('[generateScript] START story=' + STATE.story.slice(0,20) + ' style=' + STATE.storyStyle + ' art=' + STATE.artStyle);
       const ifResult = !STATE.story.trim() || !STATE.storyStyle || !STATE.artStyle;
       const dbgIf = document.getElementById('dbgIfResult');
       if (dbgIf) dbgIf.innerHTML += '<br>generateScript()执行：if条件=' + ifResult + ' → ' + (ifResult ? '❌ 进入必填项未填分支，退出' : '✅ 通过校验，开始生成');
