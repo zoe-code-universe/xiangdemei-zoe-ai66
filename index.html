@@ -1155,71 +1155,9 @@
         <div class="text-xs mt-2" style="color: var(--text-muted);">系统上限锁定3分钟，不支持超长规格</div>
       </div>
 
-      <!-- 步骤5：生成分镜按钮 -->
-      <div id="debugPanel" style="background:#0d1117;border:1px solid #30363d;border-radius:8px;padding:12px;margin-bottom:12px;font-family:monospace;font-size:12px;color:#e6edf3;display:none;">
-  <div style="color:#f0883e;font-weight:bold;margin-bottom:8px;">🔍 调试面板</div>
-  <div id="dbgState" style="margin-bottom:6px;"></div>
-  <div id="dbgBtnDisabled" style="margin-bottom:6px;"></div>
-  <div id="dbgIfResult" style="margin-bottom:6px;"></div>
-  <div id="dbgErrors" style="color:#f85149;"></div>
-</div>
-<div id="debugState" style="background:#1a1a2e;color:#888;font-size:11px;padding:4px 8px;border-radius:4px;margin-bottom:6px;">调试：正在加载...</div>
-<button id="generateScriptBtn" class="btn-generate" disabled onclick="generateScript()">
-        🤖 AI自动生成分镜头脚本
-      </button>
-
-      <!-- 步骤6：分镜展示 -->
-      <div id="scriptPanel" class="hidden">
-        <div class="script-panel">
-          <div class="script-header">
-            <div class="script-header-left">
-              <span class="step-badge">⑥</span>
-              <span class="script-header-label">AI生成的分镜头脚本</span>
-            </div>
-          </div>
-          <textarea id="scriptContent" class="script-content" rows="12" placeholder="分镜脚本将在此显示，您可以手动修改"></textarea>
-        </div>
-
-        <button id="checkScriptBtn" class="btn-secondary" disabled onclick="checkScript()">
-          🔍 AI分镜头逻辑检查
-        </button>
-
-        <!-- 步骤7：生成分镜插画 -->
-        <button id="generateImageBtn" class="btn-secondary hidden" disabled onclick="generateIllustrations()" style="margin-top: 12px;">
-          🎨 生成分镜插画（让客户预览画面）
-        </button>
-
-        <!-- 插画展示区 -->
-        <div id="imagePanel" class="hidden" style="margin-top: 16px;">
-          <div class="script-panel">
-            <div class="script-header">
-              <div class="script-header-left">
-                <span class="step-badge">⑦</span>
-                <span class="script-header-label">漫画分镜头插画</span>
-              </div>
-              <div class="script-header-right" id="imageStatusText" style="font-size: 12px; color: var(--text-muted);"></div>
-            </div>
-            <div id="imageGrid" style="display: grid; grid-template-columns: repeat(auto-fill, minmax(180px, 1fr)); gap: 12px; margin-top: 12px;">
-              <!-- 插画卡片将动态插入 -->
-            </div>
-          </div>
-          <div id="imageConfirmSection" class="hidden" style="margin-top: 12px; padding: 12px; border: 1px solid var(--border-color); border-radius: 8px; background: var(--bg-secondary);">
-            <div style="display: flex; align-items: center; gap: 8px; margin-bottom: 8px;">
-              <span style="font-size: 14px;">🎯 客户确认：</span>
-            </div>
-            <div style="display: flex; gap: 8px;">
-              <button id="confirmImageBtn" class="btn-secondary" style="flex: 1;" onclick="confirmImages()">✅ 确认插画，继续生成视频</button>
-              <button id="rejectImageBtn" class="btn-secondary" style="flex: 1; background: var(--btn-danger); color: white; border-color: var(--btn-danger);" onclick="rejectImages()">❌ 需要重新调整</button>
-            </div>
-          </div>
-        </div>
-
-        <!-- 步骤8：校验结果 -->
-        <div id="checkResult" class="hidden"></div>
-
       <!-- 步骤9：生成按钮 -->
-      <button id="generateVideoBtn" class="btn-generate hidden" disabled onclick="handleGenerateClick()" style="margin-top: 20px;">
-        🎬 一键生成成片
+      <button id="generateVideoBtn" class="btn-generate" onclick="handleGenerateClick()" style="margin-top: 20px;">
+        🎬 直接生成视频（无需分镜）
       </button>
 
       <!-- 生成状态 -->
@@ -1419,33 +1357,17 @@
       const hasArt = STATE.artStyle !== '';
       const canGenerate = hasStory && hasStyle && hasArt;
       console.log('[validateForm] canGenerate=' + canGenerate + ' btn.disabled=' + !canGenerate);
-      document.getElementById('generateScriptBtn').disabled = !canGenerate;
-      // 接口健康检查锁（视频生成按钮）
-      checkVideoProxyHealth().then(ok => {
-        const vBtn = document.getElementById('generateVideoBtn');
-        if (vBtn) vBtn.dataset.healthy = ok ? '1' : '0';
-      });
+      // generateScriptBtn 已移除
+
 
       // 调试面板更新
-      const panel = document.getElementById('debugPanel');
-      if (panel) {
-        panel.style.display = 'block';
-        document.getElementById('dbgState').innerHTML = 'STATE = ' + JSON.stringify({story: STATE.story, storyStyle: STATE.storyStyle, artStyle: STATE.artStyle, animeStyle: STATE.animeStyle, duration: STATE.duration}, null, 0);
-        const btn = document.getElementById('generateScriptBtn');
-        document.getElementById('dbgBtnDisabled').innerHTML = '按钮disabled=' + btn.disabled + ' (真实DOM属性)';
-        document.getElementById('dbgIfResult').innerHTML = 'if判断：!canGenerate=' + (!canGenerate) + ' → ' + (!canGenerate ? '进入禁用分支' : '允许点击');
-      }
+      // 调试面板（generateScriptBtn已移除，跳过该检查）
     }
 
-    // 全局错误捕获
-    window.onerror = function(msg, url, line, col, err) {
-      const errDiv = document.getElementById('dbgErrors');
-      if (errDiv) errDiv.innerHTML += 'JS报错: ' + msg + ' (行' + line + ')<br>';
-      return false;
-    };
+
 
     function updateStepIndicator() {
-      const steps = [STATE.story.trim(), STATE.storyStyle, STATE.artStyle, STATE.script];
+      const steps = [STATE.story.trim(), STATE.storyStyle, STATE.artStyle];
       document.querySelectorAll('.step-dot').forEach((el, i) => {
         el.classList.remove('active', 'done');
         if (steps[i]) {
@@ -1491,224 +1413,18 @@
       return data.choices?.[0]?.message?.content || '';
     }
 
-    async function generateScript() {
-      console.log('[generateScript] START story=' + STATE.story.slice(0,20) + ' style=' + STATE.storyStyle + ' art=' + STATE.artStyle);
-      const ifResult = !STATE.story.trim() || !STATE.storyStyle || !STATE.artStyle;
-      const dbgIf = document.getElementById('dbgIfResult');
-      if (dbgIf) dbgIf.innerHTML += '<br>generateScript()执行：if条件=' + ifResult + ' → ' + (ifResult ? '❌ 进入必填项未填分支，退出' : '✅ 通过校验，开始生成');
-      if (ifResult) {
-        alert('请先填写故事并选择风格');
-        return;
-      }
+    // generateScript 已移除
 
-      const btn = document.getElementById('generateScriptBtn');
-      btn.disabled = true;
-      btn.textContent = '⏳ AI正在创作分镜头...';
-
-      const scriptPanel = document.getElementById('scriptPanel');
-      const scriptContent = document.getElementById('scriptContent');
-      scriptPanel.classList.remove('hidden');
-      scriptContent.innerHTML = '<div class="shimmer-block" style="height: 200px;"></div>';
-
-      try {
-        const animeStyleHint = STATE.animeStyle ? `\n指定动漫风格：${STATE.animeStyle}` : '';
-        const targetDuration = parseInt(STATE.duration);
-        const numSegments = targetDuration > 11 ? Math.ceil(targetDuration / 10) : 1;
-        
-        let segmentInstruction = '';
-        if (numSegments > 1) {
-          segmentInstruction = `\n\n⚠️ 重要：目标时长${targetDuration}秒，每次生成最多11秒，请拆成${numSegments}个段落，每段约10秒。\n用以下格式明确标注段落：\n\n【段落1】\n（此段画面描述...）\n\n【段落2】\n（此段画面描述...）\n\n依此类推。各段落之间剧情要连贯，但每段可独立生成视频。`;
-        }
-        
-        const prompt = `请为以下视频故事生成短视频分镜头脚本：\n\n- 核心故事：${STATE.story}\n- 故事风格：${STATE.storyStyle}\n- 美术画风：${STATE.artStyle}${animeStyleHint}\n- 时长：${targetDuration}秒${segmentInstruction}\n\n请直接输出分镜头脚本内容，不要任何前缀说明。`;
-        
-        STATE.script = await callDeepSeek(prompt);
-        scriptContent.value = STATE.script;
-        document.getElementById('checkScriptBtn').disabled = false;
-        document.getElementById('generateImageBtn').classList.remove('hidden');
-        document.getElementById('generateImageBtn').disabled = false;
-        btn.textContent = '🤖 AI自动生成分镜头脚本';
-        btn.disabled = false;
-        updateStepIndicator();
-      } catch (error) {
-        scriptContent.value = `生成失败：${error.message}`;
-        btn.textContent = '🤖 AI自动生成分镜头脚本';
-        btn.disabled = false;
-      }
-    }
-
-    async function checkScript() {
-      if (!STATE.script) {
-        alert('请先生成分镜头脚本');
-        return;
-      }
-      // 同步用户可能手动修改的脚本内容
-      STATE.script = document.getElementById('scriptContent').value;
-
-      const btn = document.getElementById('checkScriptBtn');
-      btn.disabled = true;
-      btn.textContent = '⏳ AI检查中...';
-
-      const resultDiv = document.getElementById('checkResult');
-      resultDiv.classList.remove('hidden');
-      resultDiv.innerHTML = '<div class="shimmer-block" style="height: 80px;"></div>';
-
-      try {
-        const checkResult = await callDeepSeek(`请检查以下分镜脚本的逻辑：\n\n${STATE.script}\n\n检查维度：镜头顺序、剧情连贯、场景跳转、人物一致、风格匹配、时长适配（${STATE.duration}秒）。输出"✅通过"或"❌存在问题+说明"。`);
-        
-        if (checkResult.includes('✅') || checkResult.includes('通过')) {
-          resultDiv.innerHTML = `<div class="check-result check-pass"><div class="check-title">✅ 分镜头逻辑校验通过，可正常生成成片</div></div>`;
-          STATE.scriptValid = true;
-          const generateBtn = document.getElementById('generateVideoBtn');
-          generateBtn.classList.remove('hidden');
-          generateBtn.disabled = false;
-        } else {
-          resultDiv.innerHTML = `<div class="check-result check-fail"><div class="check-title">❌ 分镜头存在逻辑错误</div><div style="margin-top:12px;font-size:13px;color:#888;line-height:1.6;">${checkResult.replace(/❌|存在问题/gi,'').trim()}</div><button onclick="generateScript()" style="margin-top:12px;color:#f7c212;font-size:13px;font-weight:500;cursor:pointer;background:none;border:none;">→ 重新生成脚本</button></div>`;
-          STATE.scriptValid = false;
-        }
-
-        btn.textContent = '🔍 AI分镜头逻辑检查';
-        btn.disabled = false;
-      } catch (error) {
-        resultDiv.innerHTML = `<div class="check-result check-fail" style="color:#ef4444;">检查失败：${error.message}</div>`;
-        btn.textContent = '🔍 AI分镜头逻辑检查';
-        btn.disabled = false;
-      }
-    }
+    // checkScript 已移除
 
     // ============ 漫画分镜插画生成 =============
     const IMAGE_PROXY = VIDEO_PROXY;  // 共用同一个后端代理
 
-    async function generateIllustrations() {
-      // 同步用户可能手动修改的脚本内容
-      const scriptText = document.getElementById('scriptContent').value;
-      STATE.script = scriptText;
+    // generateIllustrations 已移除
 
-      const btn = document.getElementById('generateImageBtn');
-      btn.disabled = true;
-      btn.textContent = '⏳ AI正在生成插画...';
+    // confirmImages 已移除（分镜环节取消）
 
-      const imagePanel = document.getElementById('imagePanel');
-      const imageGrid = document.getElementById('imageGrid');
-      const imageStatusText = document.getElementById('imageStatusText');
-      const confirmSection = document.getElementById('imageConfirmSection');
-
-      imagePanel.classList.remove('hidden');
-      imageGrid.innerHTML = '<div class="shimmer-block" style="height: 200px;"></div>';
-      imageStatusText.textContent = '正在生成，请稍候...';
-      confirmSection.classList.add('hidden');
-
-      try {
-        // 从脚本中解析每个分镜的描述，用于生成对应插画
-        const prompt = `请从以下分镜头脚本中提取每个镜头的画面描述（提取每个"镜头"或"画面"后的核心描述，保留场景、人物、动作、氛围等关键信息）。直接输出，每行一个镜头描述，不要编号，不要前缀，格式：\n\n镜头1描述\n镜头2描述\n\n脚本如下：\n${scriptText}`;
-
-        const shotDescriptions = await callDeepSeek(prompt);
-        const shots = shotDescriptions.split('\n').filter(line => line.trim().length > 5).slice(0, 8);
-
-        if (shots.length === 0) {
-          throw new Error('无法从脚本中提取有效的镜头描述');
-        }
-
-        imageStatusText.textContent = `共 ${shots.length} 个镜头，开始生成插画...`;
-        const artStyle = STATE.artStyle || '';
-        const animeStyleHint = STATE.animeStyle ? `, ${STATE.animeStyle} style` : '';
-        const styleSuffix = artStyle ? `, ${artStyle} art style${animeStyleHint}` : ', manga style';
-
-        const imageTaskIds = [];
-        for (const shot of shots) {
-          const enhancedPrompt = `${shot.trim()}${styleSuffix}, comic panel style, detailed linework, vibrant colors`;
-          const resp = await fetchWithTimeout(`${IMAGE_PROXY}/api/image/generate`, {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({
-              prompt: enhancedPrompt,
-              model: 'wanx2.1-t2i-turbo',
-              size: '1024*1024',
-              n: 1
-            })
-          });
-          if (!resp.ok) throw new Error(`插画生成请求失败 ${resp.status}`);
-          const data = await resp.json();
-          imageTaskIds.push({ task_id: data.task_id, prompt: shot.trim(), enhancedPrompt: enhancedPrompt.slice(0, 500) });
-          imageStatusText.textContent = `已提交 ${imageTaskIds.length}/${shots.length} 个插画...`;
-        }
-
-        imageStatusText.textContent = '插画生成中，请等待完成...';
-
-        // 轮询所有任务直到完成
-        const images = [];
-        for (const item of imageTaskIds) {
-          let retries = 20;
-          while (retries-- > 0) {
-            await new Promise(r => setTimeout(r, 3000));
-            try {
-              const statusResp = await fetchWithTimeout(`${IMAGE_PROXY}/api/image/status/${item.task_id}`);
-              const statusData = await statusResp.json();
-              if (statusData.status === 'succeeded') {
-                images.push({
-                  url: statusData.images[0].url,
-                  prompt: item.prompt,
-                  enhancedPrompt: item.enhancedPrompt || item.prompt
-                });
-                break;
-              } else if (statusData.status === 'failed') {
-                images.push({ url: '', prompt: item.prompt, error: statusData.error });
-                break;
-              }
-            } catch (e) {
-              // 继续轮询
-            }
-          }
-        }
-
-        // 渲染插画网格
-        imageGrid.innerHTML = '';
-        let successCount = 0;
-        for (const img of images) {
-          const card = document.createElement('div');
-          card.style.cssText = 'border: 1px solid var(--border-color); border-radius: 8px; overflow: hidden; background: var(--bg-secondary);';
-          if (img.error) {
-            card.innerHTML = `<div style="padding:12px; font-size:12px; color:#ef4444;">❌ ${img.error}</div>`;
-          } else {
-            card.innerHTML = `<img src="${img.url}" style="width:100%;display:block;" loading="lazy" />`;
-            successCount++;
-          }
-          imageGrid.appendChild(card);
-        }
-
-        imageStatusText.textContent = `已完成 ${successCount}/${images.length} 张插画`;
-        if (successCount > 0) {
-          confirmSection.classList.remove('hidden');
-          STATE.imagesConfirmed = false;
-        }
-
-        btn.textContent = '🎨 生成分镜插画（让客户预览画面）';
-        btn.disabled = false;
-      } catch (error) {
-        imageGrid.innerHTML = `<div style="padding:16px;color:#ef4444;font-size:13px;">❌ 生成失败：${error.message}</div>`;
-        imageStatusText.textContent = '';
-        btn.textContent = '🎨 生成分镜插画（让客户预览画面）';
-        btn.disabled = false;
-      }
-    }
-
-    function confirmImages() {
-      STATE.imagesConfirmed = true;
-      const confirmSection = document.getElementById('imageConfirmSection');
-      const confirmBtn = document.getElementById('confirmImageBtn');
-      confirmBtn.textContent = '✅ 已确认插画';
-      confirmBtn.disabled = true;
-      const rejectBtn = document.getElementById('rejectImageBtn');
-      rejectBtn.disabled = true;
-      // 隐藏"需要重新调整"按钮
-      document.getElementById('rejectImageBtn').style.display = 'none';
-    }
-
-    function rejectImages() {
-      STATE.imagesConfirmed = false;
-      const imagePanel = document.getElementById('imagePanel');
-      imagePanel.classList.add('hidden');
-    }
+    // rejectImages 已移除（分镜环节取消）
 
     // ============ 视频生成API（走Railway后端代理）============
     const FETCH_TIMEOUT_MS = 30000;   // fetch 单次超时 30 秒
@@ -1855,10 +1571,7 @@
     }
 
     function handleGenerateClick() {
-      if (!STATE.scriptValid) {
-        alert('请先通过分镜逻辑检查');
-        return;
-      }
+            // scriptValid 检查已移除（分镜环节取消）
       const vBtn = document.getElementById('generateVideoBtn');
       if (vBtn && vBtn.dataset.healthy === '0') {
         alert('后端服务暂不可用，请稍后重试');
@@ -1902,346 +1615,62 @@
       videoBtn.disabled = true;
 
       try {
-        // 同步用户可能手动修改的脚本内容
-        STATE.script = document.getElementById('scriptContent').value;
+        // 直接使用用户输入的故事+风格构建视频生成prompt
+        const storyText = STATE.story;
+        const totalDuration = parseInt(STATE.duration);
+        const numSegments = totalDuration > 11 ? Math.ceil(totalDuration / 10) : 1;
 
-        // 镜头数量校验
-        const shotCount = (STATE.script.match(/【镜头\d+】/g) || []).length;
-        const duration = parseInt(STATE.duration);
-        let maxShots = 5;
-        if (duration <= 10) maxShots = 2;
-        else if (duration <= 15) maxShots = 3;
-        else if (duration <= 30) maxShots = 5;
-        else if (duration <= 60) maxShots = 8;
-        else if (duration <= 120) maxShots = 15;
-        else maxShots = 20;
-        if (shotCount > maxShots) {
-          genPanel.innerHTML = `<div style="padding:24px;color:#fbbf24;">⚠️ 镜头数超标！当前${shotCount}个镜头，时长${duration}秒最多${maxShots}个。<br><br>请编辑脚本，删除多余镜头后重试。<br><br><button onclick="document.getElementById('generateVideoBtn').disabled=false;genPanel.classList.add('hidden');" style="margin-top:12px;padding:8px 16px;background:#a78bfa;color:#fff;border:none;border-radius:8px;cursor:pointer;">返回修改</button></div>`;
+        statusText.textContent = '正在整理视频描述...';
+        statusSub.textContent = numSegments > 1 ? `将拆分为${numSegments}段生成` : '准备生成视频';
+        progressFill.style.width = '15%';
+
+        // 构建完整的视频生成prompt（风格+故事）
+        const videoPrompt = `${STATE.storyStyle}风格，${STATE.artStyle}画风，${storyText}`;
+
+        // 按 " | " 分割为多段（如果需要）
+        const rawSegs = [s.strip() for s in videoPrompt.split(' | ') if s.trim()];
+        const segmentTexts = rawSegs.length > 0 ? rawSegs : [videoPrompt];
+
+        // 镜头数校验（对第一段进行敏感词检测）
+        const bad = checkSensitive(segmentTexts[0]);
+        if (bad.length > 0) {
+          genPanel.innerHTML = `<div style="padding:24px;color:#fbbf24;">⚠️ 提示词含敏感词：${bad.join(', ')}<br><br>请修改故事内容后重试。</div>`;
+          videoBtn.disabled = false;
           return;
         }
 
-        const numSegments = parseInt(STATE.duration) > 11 ? Math.ceil(parseInt(STATE.duration) / 10) : 1;
-        
-        statusText.textContent = '正在整理分镜描述...';
-        statusSub.textContent = numSegments > 1 ? `将拆分为${numSegments}段生成` : '准备生成视频';
-        progressFill.style.width = '15%';
-        
-        // 解析段落
-        const segmentTexts = [];
-        if (numSegments > 1) {
-          // 按【段落N】分割
-          const parts = STATE.script.split(/【段落(\d+)】/);
-          for (let i = 1; i < parts.length; i += 2) {
-            const segContent = parts[i + 1] || '';
-            const visual = segContent
-              .replace(/【镜头\d+】/g, '')
-              .replace(/时长：\d+秒\n*/g, '')
-              .replace(/台词[：:][^\n]*/g, '')
-              .trim()
-              .slice(0, 400);
-            if (visual) segmentTexts.push(visual);
-          }
-          // 没找到段落标记则均分
-          if (segmentTexts.length === 0) {
-            const shots = STATE.script.split(/【镜头\d+】/).filter(s => s.trim());
-            const perSeg = Math.ceil(shots.length / numSegments);
-            for (let i = 0; i < numSegments; i++) {
-              const group = shots.slice(i * perSeg, (i + 1) * perSeg).join(' ');
-              segmentTexts.push(group.replace(/时长：\d+秒\n*/g, '').trim().slice(0, 400));
-            }
-          }
-        } else {
-          const shots = STATE.script.split(/【镜头\d+】/).filter(s => s.trim());
-          segmentTexts.push(shots.map(s => s.replace(/时长：\d+秒\n*/g, '').trim()).join(' | ').slice(0, 400));
-        }
-
-        // 插画增强已暂时禁用（减少token消耗）
-        // if (STATE.imagePrompts && STATE.imagePrompts.length > 0) { ... }
-
-        // 敏感词检测
-        for (let i = 0; i < segmentTexts.length; i++) {
-          const bad = checkSensitive(segmentTexts[i]);
-          if (bad.length > 0) {
-            genPanel.innerHTML = `<div style="padding:24px;color:#fbbf24;">⚠️ 第${i+1}段提示词含敏感词：${bad.join(', ')}<br><br>请修改分镜描述，去掉相关词汇后重试。</div>`;
-            videoBtn.disabled = false;
-            return;
-          }
-        }
-
         progressFill.style.width = '30%';
-
         statusText.textContent = numSegments > 1 ? `正在生成第1/${numSegments}段视频...` : '正在生成视频...';
         statusSub.textContent = '调用火山方舟';
         progressFill.style.width = '45%';
-        
-        // 进度回调
+
         const onSeg = (p) => {
           const pct = numSegments > 1 ? Math.floor(45 + (p / 100) * 30) : Math.floor(45 + (p / 100) * 30);
           progressFill.style.width = Math.min(pct, 85) + '%';
           if (p > 0) statusSub.textContent = `生成中... ${p}%`;
         };
 
-        const videoResult = await callJimengVideoMulti(segmentTexts, parseInt(STATE.duration), onSeg);
+        const videoResult = await callJimengVideoMulti(segmentTexts, totalDuration, onSeg);
         progressFill.style.width = '75%';
-
         statusText.textContent = '正在进行后期处理...';
-        statusSub.textContent = '视频合成 + 导出';
-        await new Promise(r => setTimeout(r, 1500));
-        progressFill.style.width = '100%';
+        progressFill.style.width = '90%';
 
-        statusText.textContent = '✅ 生成完成！';
-        statusSub.textContent = '';
-
-        STATE.freeUsed = true;
-        localStorage.setItem('xd_free_used', 'true');
-
-        setTimeout(() => {
-          genPanel.classList.add('hidden');
+        if (videoResult && videoResult.data) {
+          statusText.textContent = '✅ 视频生成完成！';
+          progressFill.style.width = '100%';
           showResult(videoResult);
-        }, 500);
-
-      } catch (error) {
-        genPanel.innerHTML = `<div style="padding: 24px; color: #ef4444;">生成失败：${error.message}</div>`;
-        videoBtn.disabled = false;
-      }
-    }
-
-    async function generateVideoWithUserKey() {
-      const genPanel = document.getElementById('generatingPanel');
-      const statusText = document.getElementById('statusText');
-      const statusSub = document.getElementById('statusSub');
-      const progressFill = document.getElementById('progressFill');
-      const videoBtn = document.getElementById('generateVideoBtn');
-
-      if (!genPanel || !statusText || !statusSub || !progressFill || !videoBtn) {
-        console.error('DOM elements missing');
-        return;
-      }
-
-      genPanel.classList.remove('hidden');
-      videoBtn.disabled = true;
-
-      try {
-        // 同步用户可能手动修改的脚本内容
-        STATE.script = document.getElementById('scriptContent').value;
-        const numSegments = parseInt(STATE.duration) > 11 ? Math.ceil(parseInt(STATE.duration) / 10) : 1;
-        
-        statusText.textContent = '正在整理分镜描述...';
-        statusSub.textContent = numSegments > 1 ? `将拆分为${numSegments}段生成` : '准备生成视频';
-        progressFill.style.width = '15%';
-        
-        const segmentTexts = [];
-        if (numSegments > 1) {
-          const parts = STATE.script.split(/【段落(\d+)】/);
-          for (let i = 1; i < parts.length; i += 2) {
-            const segContent = parts[i + 1] || '';
-            const visual = segContent
-              .replace(/【镜头\d+】/g, '')
-              .replace(/时长：\d+秒\n*/g, '')
-              .replace(/台词[：:][^\n]*/g, '')
-              .trim()
-              .slice(0, 400);
-            if (visual) segmentTexts.push(visual);
-          }
-          if (segmentTexts.length === 0) {
-            const shots = STATE.script.split(/【镜头\d+】/).filter(s => s.trim());
-            const perSeg = Math.ceil(shots.length / numSegments);
-            for (let i = 0; i < numSegments; i++) {
-              const group = shots.slice(i * perSeg, (i + 1) * perSeg).join(' ');
-              segmentTexts.push(group.replace(/时长：\d+秒\n*/g, '').trim().slice(0, 400));
-            }
-          }
         } else {
-          const shots = STATE.script.split(/【镜头\d+】/).filter(s => s.trim());
-          segmentTexts.push(shots.map(s => s.replace(/时长：\d+秒\n*/g, '').trim()).join(' | ').slice(0, 400));
+          throw new Error('视频生成未返回有效结果');
         }
-
-        // 用插画增强Prompt（如果有插画的话）
-        if (STATE.imagePrompts && STATE.imagePrompts.length > 0) {
-          for (let i = 0; i < segmentTexts.length; i++) {
-            const imgPrompt = STATE.imagePrompts[i % STATE.imagePrompts.length];
-            if (imgPrompt) {
-              segmentTexts[i] = `${segmentTexts[i]}, ${imgPrompt}`;
-            }
-          }
-        }
-
-        // 敏感词检测
-        for (let i = 0; i < segmentTexts.length; i++) {
-          const bad = checkSensitive(segmentTexts[i]);
-          if (bad.length > 0) {
-            genPanel.innerHTML = `<div style="padding:24px;color:#fbbf24;">⚠️ 第${i+1}段提示词含敏感词：${bad.join(', ')}<br><br>请修改分镜描述，去掉相关词汇后重试。</div>`;
-            videoBtn.disabled = false;
-            return;
-          }
-        }
-
-        progressFill.style.width = '30%';
-
-        statusText.textContent = numSegments > 1 ? `正在生成第1/${numSegments}段视频...` : '正在生成视频...';
-        statusSub.textContent = '调用火山方舟';
-        progressFill.style.width = '45%';
-        
-        // 进度回调
-        const onSeg = (p) => {
-          const pct = numSegments > 1 ? Math.floor(45 + (p / 100) * 30) : Math.floor(45 + (p / 100) * 30);
-          progressFill.style.width = Math.min(pct, 85) + '%';
-          if (p > 0) statusSub.textContent = `生成中... ${p}%`;
-        };
-
-        const videoResult = await callJimengVideoMulti(segmentTexts, parseInt(STATE.duration), onSeg);
-        progressFill.style.width = '75%';
-
-        statusText.textContent = '正在进行后期处理...';
-        statusSub.textContent = '视频合成 + 导出';
-        await new Promise(r => setTimeout(r, 1500));
-        progressFill.style.width = '100%';
-
-        statusText.textContent = '✅ 生成完成！';
-        statusSub.textContent = '';
-
-        setTimeout(() => {
-          genPanel.classList.add('hidden');
-          showResult(videoResult);
-        }, 500);
-
+        videoBtn.disabled = false;
+        genPanel.classList.add('hidden');
       } catch (error) {
-        genPanel.innerHTML = `<div style="padding: 24px; color: #ef4444;">生成失败：${error.message}</div>`;
+        console.error('[generateVideoWithPlatformKey]', error);
+        genPanel.innerHTML = `<div style="padding:24px;color:#f85149;">❌ 生成失败：${error.message}<br><br><button onclick="document.getElementById('generateVideoBtn').disabled=false;genPanel.classList.add('hidden');" style="padding:8px 16px;background:#a78bfa;color:#fff;border:none;border-radius:8px;cursor:pointer;">返回重试</button></div>`;
         videoBtn.disabled = false;
       }
     }
-
-    function showResult(videoResult) {
-      console.log('[showResult] called with:', JSON.stringify(videoResult));
-      const resultPanel = document.getElementById('resultPanel');
-      const videoPlaceholder = document.getElementById('videoPlaceholder');
-      const resultVideo = document.getElementById('resultVideo');
-      const segmentsGrid = document.getElementById('segmentsGrid');
-      const downloadAllBtn = document.getElementById('downloadAllBtn');
-      
-      if (!resultPanel) { console.error('[showResult] resultPanel is null!'); return; }
-      resultPanel.classList.remove('hidden');
-      if (videoPlaceholder) videoPlaceholder.style.display = 'none';
-      if (resultVideo) resultVideo.classList.add('hidden');
-      
-      const videoUrl = videoResult?.data?.video_url;
-      const segments = videoResult?.data?.segments;
-      
-      // 渲染片段下载网格
-      if (segments && segments.length > 0) {
-        renderSegmentsGrid(segments, resultVideo, videoPlaceholder);
-        downloadAllBtn.classList.remove('hidden');
-      } else {
-        segmentsGrid.innerHTML = '';
-        downloadAllBtn.classList.add('hidden');
-        if (videoUrl) {
-          if (videoPlaceholder) videoPlaceholder.style.display = 'none';
-          resultVideo.src = videoUrl;
-          resultVideo.classList.remove('hidden');
-        }
-      }
-      
-      resultPanel.scrollIntoView({ behavior: 'smooth', block: 'center' });
-    }
-
-    function renderSegmentsGrid(segments, resultVideo, videoPlaceholder) {
-      const segmentsGrid = document.getElementById('segmentsGrid');
-      const downloadAllBtn = document.getElementById('downloadAllBtn');
-      let html = '';
-      
-      STATE.downloadSegments = []; // 存储所有片段URL供下载全部使用
-      
-      segments.forEach((seg, i) => {
-        const badgeClass = seg.status === 'succeeded' ? 'badge-done'
-                        : seg.status === 'failed' ? 'badge-failed'
-                        : seg.status === 'running' ? 'badge-generating' : 'badge-pending';
-        const badgeText = seg.status === 'succeeded' ? '✓ 可下载'
-                        : seg.status === 'failed' ? '✗ 失败'
-                        : seg.status === 'running' ? '生成中' : '等待';
-        const cardClass = seg.status === 'pending' ? 'segment-card segment-pending'
-                        : seg.status === 'running' ? 'segment-card segment-generating' : 'segment-card';
-        
-        const arkUrl = seg.ark_url || '';
-        if (arkUrl) STATE.downloadSegments.push(arkUrl);
-        
-        const dlBtn = arkUrl
-          ? `<a class="segment-download-btn" href="${arkUrl}" target="_blank" download="想得美_片段${i+1}.mp4">📥 下载片段${i+1}</a>`
-          : `<span class="segment-download-btn" style="opacity:0.4;cursor:not-allowed;">📥 生成中...</span>`;
-        
-        html += `<div class="${cardClass}">
-          <span class="segment-label">片段 ${i+1}</span>
-          <span class="segment-meta">${seg.duration || 10}秒 · <span class="segment-badge ${badgeClass}">${badgeText}</span></span>
-          ${dlBtn}
-        </div>`;
-      });
-      
-      segmentsGrid.innerHTML = html;
-      
-      // 第一个成功的片段自动播放
-      const firstDone = segments.find(s => s.status === 'succeeded' && s.ark_url);
-      if (firstDone) {
-        if (videoPlaceholder) videoPlaceholder.style.display = 'none';
-        resultVideo.src = firstDone.ark_url;
-        resultVideo.classList.remove('hidden');
-      }
-    }
-
-    function downloadAllSegments() {
-      const segs = STATE.downloadSegments || [];
-      if (segs.length === 0) { alert('暂无可下载的片段'); return; }
-      segs.forEach((url, i) => {
-        setTimeout(() => {
-          const a = document.createElement('a');
-          a.href = url;
-          a.download = `想得美_片段${i+1}.mp4`;
-          a.target = '_blank';
-          document.body.appendChild(a);
-          a.click();
-          document.body.removeChild(a);
-        }, i * 800); // 每800ms触发一个下载，避免浏览器阻止
-      });
-    }
-
-    function downloadVideo() {
-      const video = document.getElementById('resultVideo');
-      if (!video || !video.src) { alert('暂无视频文件'); return; }
-      const a = document.createElement('a');
-      a.href = video.src;
-      a.download = '想得美_成片.mp4';
-      document.body.appendChild(a);
-      a.click();
-      document.body.removeChild(a);
-    }
-
-    function resetForm() {
-      STATE.story = '';
-      STATE.storyStyle = '';
-      STATE.artStyle = '';
-      STATE.animeStyle = '';
-      STATE.duration = '30';
-      STATE.script = '';
-      STATE.scriptValid = false;
-
-      document.getElementById('storyInput').value = '';
-      document.getElementById('charCount').textContent = '0';
-      document.getElementById('storyStyle').value = '';
-      document.getElementById('artStyle').value = '';
-      document.getElementById('duration').value = '30';
-      document.querySelectorAll('.style-tag').forEach(t => t.classList.remove('selected'));
-
-      document.getElementById('scriptPanel').classList.add('hidden');
-      document.getElementById('checkResult').classList.add('hidden');
-      document.getElementById('resultPanel').classList.add('hidden');
-      document.getElementById('segmentsGrid').innerHTML = '';
-      document.getElementById('downloadAllBtn').classList.add('hidden');
-      document.getElementById('generateVideoBtn').classList.add('hidden');
-      if (STATE.downloadSegments) STATE.downloadSegments = [];
-      document.getElementById('generateScriptBtn').disabled = true;
-      document.getElementById('checkScriptBtn').disabled = true;
-
-      updateStepIndicator();
-      validateForm();
-    }
+>
   </script>
 </body>
 </html>
