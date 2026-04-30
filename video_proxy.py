@@ -214,7 +214,10 @@ def status(task_id):
                 'video_url': t.get('video_url', ''),
                 'error': t.get('error', ''),
                 'failure_code': t.get('failure_code', ''),
-                'progress': t.get('progress', 0)
+                'progress': t.get('progress', 0),
+                'done_segments': t.get('done_segments', 0),
+                'total_segments': t.get('total_segments', 1),
+                'segments': t.get('segments', [])
             })
     return jsonify({'status': 'not_found', 'video_url': '', 'error': '任务不存在'})
 
@@ -227,13 +230,17 @@ def generate_long():
     task_id = f'long-{uuid.uuid4().hex[:12]}'
 
     with _task_lock:
-        _task_store[task_id] = {'status': 'running', 'video_url': '', 'error': '', 'progress': 0}
+        _task_store[task_id] = {
+            'status': 'running', 'video_url': '', 'error': '', 'progress': 0,
+            'total_segments': num, 'done_segments': 0,
+            'segments': [{'status': 'pending', 'ark_url': ''} for _ in range(num)]
+        }
 
     t = threading.Thread(target=_bg_generate_long, args=(task_id, segments, num), daemon=False)
     t.start()
     print(f'[generate_long] task_id={task_id} started thread={t.is_alive()}', flush=True)
 
-    return jsonify({'task_id': task_id, 'status': 'running'})
+    return jsonify({'task_id': task_id, 'status': 'running', 'total_segments': num})
 
 # ===== 自动分镜头多段生成 =====
 @app.route('/api/video/generate-auto', methods=['POST'])
@@ -243,13 +250,20 @@ def generate_auto():
     prompt = body.get('prompt', '')
     total_duration = int(body.get('duration', 10))
 
-    # 自动拆分：每段10秒
-    num_segments = max(1, (total_duration + 9) // 10)
-    segments = [prompt] * num_segments
+    # 自动拆分：前端传来 prompt 用 " | " 分隔的多段描述，按 " | " 拆分为独立段
+    raw_segments = [s.strip() for s in prompt.split(' | ') if s.strip()]
+    if not raw_segments:
+        return jsonify({'error': 'prompt不能为空'}), 400
+    num_segments = len(raw_segments)
+    segments = [{'prompt': s, 'duration': 10} for s in raw_segments]
 
     task_id = f'auto-{uuid.uuid4().hex[:12]}'
     with _task_lock:
-        _task_store[task_id] = {'status': 'running', 'video_url': '', 'error': '', 'progress': 0, 'total_segments': num_segments}
+        _task_store[task_id] = {
+            'status': 'running', 'video_url': '', 'error': '', 'progress': 0,
+            'total_segments': num_segments, 'done_segments': 0,
+            'segments': [{'status': 'pending', 'ark_url': ''} for _ in range(num_segments)]
+        }
 
     t = threading.Thread(target=_bg_generate_long, args=(task_id, segments, num_segments), daemon=False)
     t.start()
@@ -280,40 +294,38 @@ def _bg_generate(task_id, prompt, duration):
         _task_sem.release()
         print(f'[_bg_generate] DONE task_id={task_id}', flush=True)
 
-# ===== 后台生成（多段）=====
+# ===== 后台生成（多段，不做本地拼接，直接返回ARK CDN URL）=====
 def _bg_generate_long(task_id, segments, num):
     print(f'[_bg_generate_long] START task_id={task_id} segments={num}', flush=True)
     _task_sem.acquire()
-    run_id = uuid.uuid4().hex[:8]
-    seg_files, seg_urls = [], []
     try:
         for i, seg in enumerate(segments):
             p = str(seg.get('prompt', ''))[:500]
             d = min(int(seg.get('duration', 10)), 11)
             print(f'[_bg_generate_long] segment {i+1}/{num} submitting task_id={task_id}', flush=True)
-            _set_status(task_id, 'running', progress=int((i / num) * 80))
+            _set_status(task_id, status='running', progress=int((i / num) * 80))
             tid = _ark_submit_with_retry(p, d)
             print(f'[_bg_generate_long] segment {i+1}/{num} ARK tid={tid} task_id={task_id}', flush=True)
             status, url, code = _poll_ark(tid)
+            # 每段完成后立即更新 segments 数组
+            with _task_lock:
+                if task_id in _task_store:
+                    segs = _task_store[task_id].get('segments', [])
+                    if i < len(segs):
+                        segs[i] = {'status': status, 'ark_url': url if status == 'succeeded' else ''}
+                    _task_store[task_id]['done_segments'] = i + 1
             if status != 'succeeded':
                 _set_status(task_id, 'failed', error=f'第{i+1}段失败', failure_code=code or 'UNKNOWN')
                 return
-            path = os.path.join(TEMP_DIR, f'{run_id}_s{i+1:02d}.mp4')
-            download(url, path)
-            seg_files.append(path)
-            seg_urls.append(url)
             print(f'[_bg_generate_long] segment {i+1}/{num} done task_id={task_id}', flush=True)
 
-        _set_status(task_id, 'running', progress=85)
-        if num == 1:
-            video_url = seg_urls[0]
-        else:
-            out = os.path.join(TEMP_DIR, f'{run_id}_final.mp4')
-            concat(seg_files, out)
-            for f in seg_files:
-                os.remove(f)
-            video_url = f'http://localhost:{PORT}/api/video/serve/{out}'
-        _set_status(task_id, 'succeeded', video_url=video_url, progress=100)
+        # 全部成功：取第一个可用 URL 作为主 video_url
+        with _task_lock:
+            if task_id in _task_store:
+                segs = _task_store[task_id]['segments']
+                ok_urls = [s['ark_url'] for s in segs if s['status'] == 'succeeded']
+                _task_store[task_id]['video_url'] = ok_urls[0] if ok_urls else ''
+        _set_status(task_id, status='succeeded', progress=100)
         print(f'[_bg_generate_long] ALL DONE task_id={task_id}', flush=True)
     except Exception as e:
         print(f'[_bg_generate_long] EXCEPTION task_id={task_id} error={e}', flush=True)
@@ -322,7 +334,7 @@ def _bg_generate_long(task_id, segments, num):
         _task_sem.release()
 
 # ===== 状态更新辅助 =====
-def _set_status(task_id, status=None, video_url=None, error=None, failure_code=None, progress=None):
+def _set_status(task_id, status=None, video_url=None, error=None, failure_code=None, progress=None, done_segments=None, total_segments=None, segments=None):
     with _task_lock:
         if task_id in _task_store:
             if status is not None:
@@ -335,6 +347,12 @@ def _set_status(task_id, status=None, video_url=None, error=None, failure_code=N
                 _task_store[task_id]['failure_code'] = failure_code
             if progress is not None:
                 _task_store[task_id]['progress'] = progress
+            if done_segments is not None:
+                _task_store[task_id]['done_segments'] = done_segments
+            if total_segments is not None:
+                _task_store[task_id]['total_segments'] = total_segments
+            if segments is not None:
+                _task_store[task_id]['segments'] = segments
 
 # ===== ARK 提交（指数退避重试）=====
 MAX_RETRIES = 5
