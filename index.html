@@ -3,8 +3,9 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <link rel="icon" href="data:image/svg+xml,<svg xmlns=%22http://www.w3.org/2000/svg%22 viewBox=%220 0 100 100%22><text y=%22.9em%22 font-size=%2290%22>🎬</text></svg>">
   <title>想得美 — AI视频生成工具</title>
-  <script src="https://cdn.tailwindcss.com"></script>
+  <script src="https://cdn.tailwindcss.com?plugins=forms,typography"></script>
   <link href="https://fonts.googleapis.com/css2?family=Noto+Sans+SC:wght@300;400;500;700;900&display=swap" rel="stylesheet">
   <style>
     :root {
@@ -1419,6 +1420,11 @@
       const canGenerate = hasStory && hasStyle && hasArt;
       console.log('[validateForm] canGenerate=' + canGenerate + ' btn.disabled=' + !canGenerate);
       document.getElementById('generateScriptBtn').disabled = !canGenerate;
+      // 接口健康检查锁（视频生成按钮）
+      checkVideoProxyHealth().then(ok => {
+        const vBtn = document.getElementById('generateVideoBtn');
+        if (vBtn) vBtn.dataset.healthy = ok ? '1' : '0';
+      });
 
       // 调试面板更新
       const panel = document.getElementById('debugPanel');
@@ -1452,6 +1458,18 @@
 
     // ============ 后端代理地址（必须最先定义）============
     const VIDEO_PROXY = 'https://thorough-contentment-production-89d3.up.railway.app';
+
+    // ============ 接口健康检查（30秒缓存）============
+    let _healthCache = { ok: false, ts: 0 };
+    async function checkVideoProxyHealth() {
+      const now = Date.now();
+      if (now - _healthCache.ts < 30000) return _healthCache.ok;
+      try {
+        const r = await fetchWithTimeout(`${VIDEO_PROXY}/api/health`, { timeout: 3000 });
+        _healthCache = { ok: r.ok, ts: now };
+      } catch { _healthCache = { ok: false, ts: now }; }
+      return _healthCache.ok;
+    }
 
     // ============ DeepSeek API（走 Railway 后端代理）============
     async function callDeepSeek(prompt) {
@@ -1841,6 +1859,11 @@
         alert('请先通过分镜逻辑检查');
         return;
       }
+      const vBtn = document.getElementById('generateVideoBtn');
+      if (vBtn && vBtn.dataset.healthy === '0') {
+        alert('后端服务暂不可用，请稍后重试');
+        return;
+      }
       generateVideoWithPlatformKey();
     }
 
@@ -1886,8 +1909,12 @@
         const shotCount = (STATE.script.match(/【镜头\d+】/g) || []).length;
         const duration = parseInt(STATE.duration);
         let maxShots = 5;
-        if (duration <= 15) maxShots = 2;
-        else if (duration <= 30) maxShots = 3;
+        if (duration <= 10) maxShots = 2;
+        else if (duration <= 15) maxShots = 3;
+        else if (duration <= 30) maxShots = 5;
+        else if (duration <= 60) maxShots = 8;
+        else if (duration <= 120) maxShots = 15;
+        else maxShots = 20;
         if (shotCount > maxShots) {
           genPanel.innerHTML = `<div style="padding:24px;color:#fbbf24;">⚠️ 镜头数超标！当前${shotCount}个镜头，时长${duration}秒最多${maxShots}个。<br><br>请编辑脚本，删除多余镜头后重试。<br><br><button onclick="document.getElementById('generateVideoBtn').disabled=false;genPanel.classList.add('hidden');" style="margin-top:12px;padding:8px 16px;background:#a78bfa;color:#fff;border:none;border-radius:8px;cursor:pointer;">返回修改</button></div>`;
           return;
@@ -1928,15 +1955,8 @@
           segmentTexts.push(shots.map(s => s.replace(/时长：\d+秒\n*/g, '').trim()).join(' | ').slice(0, 400));
         }
 
-        // 用插画增强Prompt（如果有插画的话）
-        if (STATE.imagePrompts && STATE.imagePrompts.length > 0) {
-          for (let i = 0; i < segmentTexts.length; i++) {
-            const imgPrompt = STATE.imagePrompts[i % STATE.imagePrompts.length];
-            if (imgPrompt) {
-              segmentTexts[i] = `${segmentTexts[i]}, ${imgPrompt}`;
-            }
-          }
-        }
+        // 插画增强已暂时禁用（减少token消耗）
+        // if (STATE.imagePrompts && STATE.imagePrompts.length > 0) { ... }
 
         // 敏感词检测
         for (let i = 0; i < segmentTexts.length; i++) {
