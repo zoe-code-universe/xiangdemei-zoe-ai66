@@ -269,6 +269,61 @@ def generate_long():
 
     return jsonify({'task_id': task_id, 'status': 'running', 'total_segments': num})
 
+# ===== ARK 直连代理（绕过 Railway 网络限制）====
+@app.route('/api/proxy/ark/submit', methods=['POST'])
+def ark_proxy_submit():
+    """直接提交任务到 ARK，返回 task_id，用于诊断网络问题"""
+    body = request.json or {}
+    prompt = body.get('prompt', '')
+    duration = min(int(body.get('duration', 5)), 11)
+
+    body_req = json.dumps({
+        'model': MODEL,
+        'content': [{'type': 'text', 'text': prompt}],
+        'ratio': '16:9',
+        'duration': duration,
+        'watermark': False
+    }, ensure_ascii=False).encode()
+
+    try:
+        req = urllib.request.Request(
+            f'{ARK_BASE}/api/v3/contents/generations/tasks',
+            data=body_req,
+            headers={'Content-Type': 'application/json', 'Authorization': f'Bearer {_ark_key()}'},
+            method='POST'
+        )
+        with urllib.request.urlopen(req, timeout=30, context=ssl._create_unverified_context()) as r:
+            result = json.loads(r.read())
+            task_id = result.get('id', '')
+            print(f'[ark_proxy_submit] success task_id={task_id}', flush=True)
+            return jsonify({'success': True, 'task_id': task_id})
+    except urllib.error.HTTPError as e:
+        err_body = e.read().decode('utf-8', errors='replace')
+        print(f'[ark_proxy_submit] HTTP error {e.code}: {err_body}', flush=True)
+        return jsonify({'success': False, 'error': f'HTTP {e.code}', 'detail': err_body}), e.code
+    except Exception as e:
+        print(f'[ark_proxy_submit] error: {e}', flush=True)
+        return jsonify({'success': False, 'error': str(e)}), 500
+
+@app.route('/api/proxy/ark/status/<task_id>', methods=['GET'])
+def ark_proxy_status(task_id):
+    """查询 ARK 任务状态"""
+    try:
+        req = urllib.request.Request(
+            f'{ARK_BASE}/api/v3/contents/generations/tasks/{task_id}',
+            headers={'Authorization': f'Bearer {_ark_key()}'},
+            method='GET'
+        )
+        with urllib.request.urlopen(req, timeout=30, context=ssl._create_unverified_context()) as r:
+            result = json.loads(r.read())
+            return jsonify({'success': True, 'status': result})
+    except urllib.error.HTTPError as e:
+        err_body = e.read().decode('utf-8', errors='replace')
+        return jsonify({'success': False, 'error': f'HTTP {e.code}', 'detail': err_body}), e.code
+    except Exception as e:
+        return jsonify({'success': False, 'error': str(e)}), 500
+
+
 # ===== 自动分镜头多段生成 =====
 @app.route('/api/video/generate-auto', methods=['POST'])
 def generate_auto():
