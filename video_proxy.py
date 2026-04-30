@@ -235,6 +235,28 @@ def generate_long():
 
     return jsonify({'task_id': task_id, 'status': 'running'})
 
+# ===== 自动分镜头多段生成 =====
+@app.route('/api/video/generate-auto', methods=['POST'])
+def generate_auto():
+    """根据总时长自动拆分为10秒一段，调用generate-long逻辑"""
+    body = request.json or {}
+    prompt = body.get('prompt', '')
+    total_duration = int(body.get('duration', 10))
+
+    # 自动拆分：每段10秒
+    num_segments = max(1, (total_duration + 9) // 10)
+    segments = [prompt] * num_segments
+
+    task_id = f'auto-{uuid.uuid4().hex[:12]}'
+    with _task_lock:
+        _task_store[task_id] = {'status': 'running', 'video_url': '', 'error': '', 'progress': 0, 'total_segments': num_segments}
+
+    t = threading.Thread(target=_bg_generate_long, args=(task_id, segments, num_segments), daemon=False)
+    t.start()
+    print(f'[generate_auto] task_id={task_id} segments={num_segments} started', flush=True)
+
+    return jsonify({'task_id': task_id, 'status': 'running', 'total_segments': num_segments})
+
 # ===== 后台生成（单段）=====
 def _bg_generate(task_id, prompt, duration):
     print(f'[_bg_generate] START task_id={task_id}', flush=True)
