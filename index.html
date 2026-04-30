@@ -1155,7 +1155,15 @@
       </div>
 
       <!-- 步骤5：生成分镜按钮 -->
-      <div id="debugState" style="background:#1a1a2e;color:#888;font-size:11px;padding:4px 8px;border-radius:4px;margin-bottom:6px;">调试：正在加载...</div><button id="generateScriptBtn" class="btn-generate" disabled onclick="generateScript()">
+      <div id="debugPanel" style="background:#0d1117;border:1px solid #30363d;border-radius:8px;padding:12px;margin-bottom:12px;font-family:monospace;font-size:12px;color:#e6edf3;display:none;">
+  <div style="color:#f0883e;font-weight:bold;margin-bottom:8px;">🔍 调试面板</div>
+  <div id="dbgState" style="margin-bottom:6px;"></div>
+  <div id="dbgBtnDisabled" style="margin-bottom:6px;"></div>
+  <div id="dbgIfResult" style="margin-bottom:6px;"></div>
+  <div id="dbgErrors" style="color:#f85149;"></div>
+</div>
+<div id="debugState" style="background:#1a1a2e;color:#888;font-size:11px;padding:4px 8px;border-radius:4px;margin-bottom:6px;">调试：正在加载...</div>
+<button id="generateScriptBtn" class="btn-generate" disabled onclick="generateScript()">
         🤖 AI自动生成分镜头脚本
       </button>
 
@@ -1409,10 +1417,24 @@
       const hasArt = STATE.artStyle !== '';
       const canGenerate = hasStory && hasStyle && hasArt;
       document.getElementById('generateScriptBtn').disabled = !canGenerate;
-      // 调试用，可删除
-      const dbg = document.getElementById('debugState');
-      if (dbg) dbg.textContent = 'story=' + hasStory + ' style=' + hasStyle + ' art=' + hasArt + ' → 按钮' + (canGenerate ? '可点' : '禁用');
+
+      // 调试面板更新
+      const panel = document.getElementById('debugPanel');
+      if (panel) {
+        panel.style.display = 'block';
+        document.getElementById('dbgState').innerHTML = 'STATE = ' + JSON.stringify({story: STATE.story, storyStyle: STATE.storyStyle, artStyle: STATE.artStyle, animeStyle: STATE.animeStyle, duration: STATE.duration}, null, 0);
+        const btn = document.getElementById('generateScriptBtn');
+        document.getElementById('dbgBtnDisabled').innerHTML = '按钮disabled=' + btn.disabled + ' (真实DOM属性)';
+        document.getElementById('dbgIfResult').innerHTML = 'if判断：!canGenerate=' + (!canGenerate) + ' → ' + (!canGenerate ? '进入禁用分支' : '允许点击');
+      }
     }
+
+    // 全局错误捕获
+    window.onerror = function(msg, url, line, col, err) {
+      const errDiv = document.getElementById('dbgErrors');
+      if (errDiv) errDiv.innerHTML += 'JS报错: ' + msg + ' (行' + line + ')<br>';
+      return false;
+    };
 
     function updateStepIndicator() {
       const steps = [STATE.story.trim(), STATE.storyStyle, STATE.artStyle, STATE.script];
@@ -1456,7 +1478,10 @@
     }
 
     async function generateScript() {
-      if (!STATE.story.trim() || !STATE.storyStyle || !STATE.artStyle) {
+      const ifResult = !STATE.story.trim() || !STATE.storyStyle || !STATE.artStyle;
+      const dbgIf = document.getElementById('dbgIfResult');
+      if (dbgIf) dbgIf.innerHTML += '<br>generateScript()执行：if条件=' + ifResult + ' → ' + (ifResult ? '❌ 进入必填项未填分支，退出' : '✅ 通过校验，开始生成');
+      if (ifResult) {
         alert('请先填写故事并选择风格');
         return;
       }
