@@ -1155,7 +1155,7 @@
       </div>
 
       <!-- 步骤5：生成分镜按钮 -->
-      <button id="generateScriptBtn" class="btn-generate" disabled onclick="generateScript()">
+      <div id="debugState" style="background:#1a1a2e;color:#888;font-size:11px;padding:4px 8px;border-radius:4px;margin-bottom:6px;">调试：正在加载...</div><button id="generateScriptBtn" class="btn-generate" disabled onclick="generateScript()">
         🤖 AI自动生成分镜头脚本
       </button>
 
@@ -1404,10 +1404,14 @@
     });
 
     function validateForm() {
-      const canGenerate = STATE.story.trim().length > 0 && 
-                         STATE.storyStyle !== '' && 
-                         STATE.artStyle !== '';
+      const hasStory = STATE.story.trim().length > 0;
+      const hasStyle = STATE.storyStyle !== '';
+      const hasArt = STATE.artStyle !== '';
+      const canGenerate = hasStory && hasStyle && hasArt;
       document.getElementById('generateScriptBtn').disabled = !canGenerate;
+      // 调试用，可删除
+      const dbg = document.getElementById('debugState');
+      if (dbg) dbg.textContent = 'story=' + hasStory + ' style=' + hasStyle + ' art=' + hasArt + ' → 按钮' + (canGenerate ? '可点' : '禁用');
     }
 
     function updateStepIndicator() {
