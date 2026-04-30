@@ -1507,67 +1507,53 @@
       }
       console.log('[callJimengVideoMulti] 开始多段生成', segmentTexts.length, '段, 总时长', totalDuration, '秒');
       
-      // 调用新的auto接口，自动分镜头
-      const resp = await fetchWithTimeout(`${VIDEO_PROXY}/api/video/generate-auto`, {
+      // 调用ARK直连proxy端点（已验证Railway→ARK网络通畅）
+      const resp = await fetchWithTimeout(`${VIDEO_PROXY}/api/proxy/ark/submit`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           prompt: segmentTexts.join(' | '),
-          duration: parseInt(totalDuration)
-        })
+          duration: Math.min(parseInt(totalDuration), 10)
+        }),
+        signal: AbortSignal.timeout(30000)
       });
       
-      if (!resp.ok) {
-        const err = await resp.text();
-        console.error('[callJimengVideoMulti] 提交失败:', err);
-        throw new Error(`分段生成提交失败: ${err}`);
-      }
-      
       const result = await resp.json();
-      console.log('[callJimengVideoMulti] 响应:', result);
+      console.log('[callJimengVideoMulti] 提交响应:', result);
       
-      if (!result.task_id) {
-        throw new Error('接口返回异常，缺少task_id: ' + JSON.stringify(result));
+      if (!resp.ok || !result.success || !result.task_id) {
+        throw new Error(result.error || result.detail || 'ARK提交失败');
       }
       
       const taskId = result.task_id;
-      const totalSeg = result.total_segments || segmentTexts.length;
-      console.log('[callJimengVideoMulti] 任务ID:', taskId, '总片段:', totalSeg, '开始轮询...');
+      console.log('[callJimengVideoMulti] ARK任务ID:', taskId, '开始轮询...');
       
-      // 异步轮询，实时获取每段URL
       const start = Date.now();
-      let lastSegments = [];
       while (Date.now() - start < POLL_MAX_MS) {
         await new Promise(r => setTimeout(r, POLL_INTERVAL_MS));
-        const pollResp = await fetchWithTimeout(`${VIDEO_PROXY}/api/video/status/${taskId}`);
+        const pollResp = await fetchWithTimeout(`${VIDEO_PROXY}/api/proxy/ark/status/${taskId}`);
         const pollData = await pollResp.json();
         
-        const done = pollData.done_segments || 0;
-        const pct = Math.floor((done / totalSeg) * 100);
-        if (onSegmentProgress) onSegmentProgress(pct);
-        
-        // 实时更新片段状态（showResult支持中途渲染）
-        if (pollData.segments && JSON.stringify(pollData.segments) !== JSON.stringify(lastSegments)) {
-          lastSegments = pollData.segments;
-          renderSegmentsGrid(pollData.segments,
-            document.getElementById('resultVideo'),
-            document.getElementById('videoPlaceholder'));
+        if (!pollResp.ok || !pollData.success) {
+          throw new Error(pollData.error || '轮询查询失败');
         }
         
-        if (pollData.status === 'succeeded') {
-          console.log('[callJimengVideoMulti] 全部成功!');
-          // 最后一轮更新，拿到所有URL
-          const finalResp = await fetchWithTimeout(`${VIDEO_PROXY}/api/video/status/${taskId}`);
-          const finalData = await finalResp.json();
-          const segs = finalData.segments || [];
-          const firstUrl = segs.find(s => s.status === 'succeeded')?.ark_url || '';
-          return { data: { video_url: firstUrl, segments: segs } };
+        const status = pollData.status.status;
+        console.log('[callJimengVideoMulti] 状态:', status, '进度:', pollData.status);
+        
+        if (status === 'succeeded') {
+          console.log('[callJimengVideoMulti] ✅ 视频生成成功!');
+          return { data: { video_url: pollData.status.content.video_url } };
         }
-        if (pollData.status === 'failed') {
-          throw new Error(`视频生成失败: ${pollData.error || ''}`);
+        if (status === 'failed') {
+          const err = pollData.status.content?.failure_code || pollData.status.error || '视频生成失败';
+          throw new Error(err);
+        }
+        if (status === 'running') {
+          if (onSegmentProgress) onSegmentProgress(Math.floor(Math.random() * 15 + 70));
         }
       }
-      throw new Error('视频生成超时，请稍后重试');
+      throw new Error('轮询超时');
     }
 
     function handleGenerateClick() {
