@@ -1433,7 +1433,13 @@
         body: JSON.stringify({
           model: 'deepseek-chat',
           messages: [
-            { role: 'system', content: '你是一个专业的AI视频分镜头脚本编剧。根据用户提供的故事信息，生成符合短视频制作规范的分镜头脚本。输出格式：每个镜头包含镜号、画面描述、台词/旁白、时长估算。请直接输出脚本内容，不要额外解释。' },
+            { role: 'system', content: '你是一个专业的AI视频分镜头脚本编剧。根据用户提供的故事信息，生成符合短视频制作规范的分镜头脚本。输出格式：每个镜头包含镜号、画面描述、台词/旁白、时长估算。请直接输出脚本内容，不要额外解释。
+
+⚠️ 镜头数量严格限制：
+- 时长≤15秒：最多2个镜头（每镜≥7秒）
+- 时长≤30秒：最多3个镜头（每镜≥10秒）
+- 时长≤60秒：最多5个镜头（每镜≥12秒）
+⚠️ 每个镜头只描述1个核心主体，禁止多元素叠加；动态效果仅用"缓慢平移"/"轻微晃动"，禁止复杂特效。' },
             { role: 'user', content: prompt }
           ],
           temperature: 0.7,
@@ -1849,6 +1855,18 @@
       try {
         // 同步用户可能手动修改的脚本内容
         STATE.script = document.getElementById('scriptContent').value;
+
+        // 镜头数量校验
+        const shotCount = (STATE.script.match(/【镜头\d+】/g) || []).length;
+        const duration = parseInt(STATE.duration);
+        let maxShots = 5;
+        if (duration <= 15) maxShots = 2;
+        else if (duration <= 30) maxShots = 3;
+        if (shotCount > maxShots) {
+          genPanel.innerHTML = `<div style="padding:24px;color:#fbbf24;">⚠️ 镜头数超标！当前${shotCount}个镜头，时长${duration}秒最多${maxShots}个。<br><br>请编辑脚本，删除多余镜头后重试。<br><br><button onclick="document.getElementById('generateVideoBtn').disabled=false;genPanel.classList.add('hidden');" style="margin-top:12px;padding:8px 16px;background:#a78bfa;color:#fff;border:none;border-radius:8px;cursor:pointer;">返回修改</button></div>`;
+          return;
+        }
+
         const numSegments = parseInt(STATE.duration) > 11 ? Math.ceil(parseInt(STATE.duration) / 10) : 1;
         
         statusText.textContent = '正在整理分镜描述...';
