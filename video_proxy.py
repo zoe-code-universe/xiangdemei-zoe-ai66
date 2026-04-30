@@ -21,6 +21,33 @@ _task_sem = threading.Semaphore(MAX_CONCURRENT)
 _task_store = {}
 _task_lock = threading.Lock()
 
+# ===== 超时熔断器 =====
+_CB_LOCK = threading.Lock()
+_CIRCUIT_BREAKER = {}  # {prompt_hash: blocked_until_timestamp}
+CB_TIMEOUT = 30  # ARK单次调用超时秒数
+CB_LOCKOUT = 600  # 失败后锁定10分钟（秒）
+
+def _cb_key(prompt):
+    import hashlib
+    return hashlib.md5(prompt[:200].encode()).hexdigest()
+
+def _cb_check(prompt):
+    with _CB_LOCK:
+        h = _cb_key(prompt)
+        if h in _CIRCUIT_BREAKER:
+            if time.time() < _CIRCUIT_BREAKER[h]:
+                return False, _CIRCUIT_BREAKER[h]
+        return True, 0
+
+def _cb_fail(prompt):
+    with _CB_LOCK:
+        _CIRCUIT_BREAKER[_cb_key(prompt)] = time.time() + CB_LOCKOUT
+        print(f'[CIRCUIT_BREAKER] blocked {_cb_key(prompt)} for {CB_LOCKOUT}s', flush=True)
+
+def _cb_success(prompt):
+    with _CB_LOCK:
+        _CIRCUIT_BREAKER.pop(_cb_key(prompt), None)
+
 def _ark_key():
     return os.environ.get('ARK_KEY', '')
 
@@ -251,6 +278,13 @@ def generate_auto():
     total_duration = int(body.get('duration', 10))
 
     # 自动拆分：前端传来 prompt 用 " | " 分隔的多段描述，按 " | " 拆分为独立段
+    # 熔断检查（第一段的prompt作为key）
+    first_prompt = (prompt.split(' | ')[0] if ' | ' in prompt else prompt).strip()[:200]
+    ok, blocked_until = _cb_check(first_prompt)
+    if not ok:
+        remaining = int(blocked_until - time.time())
+        return jsonify({'error': f'请求过于频繁，请在{remaining}秒后重试'}), 429
+
     raw_segments = [s.strip() for s in prompt.split(' | ') if s.strip()]
     if not raw_segments:
         return jsonify({'error': 'prompt不能为空'}), 400
@@ -316,6 +350,7 @@ def _bg_generate_long(task_id, segments, num):
                     _task_store[task_id]['done_segments'] = i + 1
             if status != 'succeeded':
                 _set_status(task_id, 'failed', error=f'第{i+1}段失败', failure_code=code or 'UNKNOWN')
+                _cb_fail(segments[i].get('prompt', '') if i < len(segments) else '')
                 return
             print(f'[_bg_generate_long] segment {i+1}/{num} done task_id={task_id}', flush=True)
 
@@ -326,6 +361,7 @@ def _bg_generate_long(task_id, segments, num):
                 ok_urls = [s['ark_url'] for s in segs if s['status'] == 'succeeded']
                 _task_store[task_id]['video_url'] = ok_urls[0] if ok_urls else ''
         _set_status(task_id, status='succeeded', progress=100)
+        _cb_success(segments[0].get('prompt', '') if segments else '')
         print(f'[_bg_generate_long] ALL DONE task_id={task_id}', flush=True)
     except Exception as e:
         print(f'[_bg_generate_long] EXCEPTION task_id={task_id} error={e}', flush=True)
@@ -375,7 +411,7 @@ def _ark_submit_with_retry(prompt, duration, retries=MAX_RETRIES):
                 headers={'Content-Type': 'application/json', 'Authorization': f'Bearer {_ark_key()}'},
                 method='POST'
             )
-            with urllib.request.urlopen(req, timeout=60, context=ssl._create_unverified_context()) as r:
+            with urllib.request.urlopen(req, timeout=30, context=ssl._create_unverified_context()) as r:
                 result = json.loads(r.read())
                 return result.get('id')
         except urllib.error.HTTPError as e:
@@ -398,7 +434,7 @@ def _ark_submit_with_retry(prompt, duration, retries=MAX_RETRIES):
     raise RuntimeError('ARK max retries exceeded')
 
 # ===== ARK 轮询 =====
-def _poll_ark(ark_task_id, timeout=600):
+def _poll_ark(ark_task_id, timeout=120):
     start = time.time()
     interval = 5
     while time.time() - start < timeout:
