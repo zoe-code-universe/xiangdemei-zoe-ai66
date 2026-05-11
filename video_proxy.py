@@ -57,6 +57,10 @@ def _ds_key():
 def _wanx_key():
     return os.environ.get('WANXIANG_KEY', '').strip()
 
+@app.route('/')
+def index():
+    return send_file('index.html') # 添加首页，http://localhost:8080 默认打开
+
 # ===== CORS =====
 @app.after_request
 def add_cors(res):
