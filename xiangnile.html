@@ -1,0 +1,588 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>想你了 · 私密缅怀空间</title>
+  <style>
+    * {
+      margin: 0;
+      padding: 0;
+      box-sizing: border-box;
+    }
+
+    body {
+      background-color: #050508;
+      color: #e0e0e0;
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', serif;
+      overflow-x: hidden;
+      position: relative;
+      min-height: 100vh;
+    }
+
+    /* 流星背景容器 */
+    .meteor-container {
+      position: fixed;
+      top: 0;
+      left: 0;
+      width: 100%;
+      height: 100%;
+      z-index: 0;
+      pointer-events: none;
+    }
+
+    .meteor {
+      position: absolute;
+      width: 3px;
+      height: 100px;
+      background: linear-gradient(to bottom, rgba(255,255,255,0.9), rgba(167, 139, 250, 0.5), transparent);
+      border-radius: 100px;
+      filter: blur(0.5px);
+      animation: meteorFall linear infinite;
+      opacity: 0;
+    }
+
+    @keyframes meteorFall {
+      0% {
+        opacity: 1;
+        transform: translateY(-100px) translateX(0) rotate(-45deg);
+      }
+      70% {
+        opacity: 1;
+      }
+      100% {
+        opacity: 0;
+        transform: translateY(120vh) translateX(-120vh) rotate(-45deg);
+      }
+    }
+
+    /* 导航栏 */
+    nav {
+      position: fixed;
+      top: 0;
+      left: 0;
+      width: 100%;
+      padding: 16px 40px;
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      z-index: 100;
+      background: rgba(5, 5, 8, 0.85);
+      backdrop-filter: blur(12px);
+    }
+
+    .nav-logo {
+      font-size: 14px;
+      font-weight: 600;
+      color: #e0e0e0;
+    }
+
+    .nav-btn {
+      padding: 6px 14px;
+      border-radius: 6px;
+      font-size: 13px;
+      font-weight: 500;
+      cursor: pointer;
+      border: none;
+      transition: all 0.2s ease;
+      background: #E5E5E5;
+      color: #0A0A0A;
+    }
+
+    .nav-btn:hover {
+      background: #FFFFFF;
+    }
+
+    /* 主内容容器 */
+    .container {
+      position: relative;
+      z-index: 1;
+      padding: 80px 40px 60px;
+      max-width: 1000px;
+      margin: 0 auto;
+    }
+
+    /* 霓虹动态标题 */
+    .main-title {
+      font-size: 64px;
+      font-weight: 700;
+      letter-spacing: 10px;
+      margin-bottom: 20px;
+      text-align: center;
+      background: linear-gradient(90deg, #A78BFA, #60A5FA, #34D399, #F7BA1E, #A78BFA);
+      background-size: 200% auto;
+      -webkit-background-clip: text;
+      background-clip: text;
+      color: transparent;
+      animation: neonFlow 6s linear infinite;
+    }
+
+    /* 霓虹动态标语（放大版） */
+    .main-slogan {
+      font-size: 32px;
+      letter-spacing: 2px;
+      margin-bottom: 60px;
+      text-align: center;
+      background: linear-gradient(90deg, #60A5FA, #A78BFA, #F472B6, #60A5FA);
+      background-size: 200% auto;
+      -webkit-background-clip: text;
+      background-clip: text;
+      color: transparent;
+      animation: neonFlow 8s linear infinite;
+    }
+
+    @keyframes neonFlow {
+      0% { background-position: 0% center; }
+      100% { background-position: 200% center; }
+    }
+
+    /* 主体布局：左三列 + 右一列 */
+    .main-content {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 40px;
+      align-items: start;
+    }
+
+    /* 左侧功能列表 */
+    .left-func-list {
+      display: flex;
+      flex-direction: column;
+      gap: 20px;
+    }
+
+    /* 右侧重点卡片 */
+    .right-highlight-card {
+      display: flex;
+      align-items: center;
+      justify-content: center;
+    }
+
+    /* 通用卡片样式 */
+    .func-card {
+      background: rgba(30, 30, 50, 0.35);
+      border: 1px solid rgba(140, 120, 220, 0.2);
+      border-radius: 12px;
+      padding: 24px;
+      text-align: left;
+      transition: all 0.3s ease;
+    }
+
+    .func-card:hover {
+      border-color: rgba(140, 120, 220, 0.5);
+      box-shadow: 0 0 20px rgba(140, 120, 220, 0.15);
+    }
+
+    /* 右侧重点卡片霓虹高亮效果 */
+    .highlight-card {
+      border: 1px solid rgba(167, 139, 250, 0.5);
+      box-shadow: 0 0 30px rgba(167, 139, 250, 0.25);
+      background: rgba(167, 139, 250, 0.1);
+      min-height: 280px;
+      display: flex;
+      flex-direction: column;
+      justify-content: center;
+    }
+
+    .card-title {
+      font-size: 18px;
+      color: #c4b5e8;
+      margin-bottom: 8px;
+    }
+
+    .card-desc {
+      font-size: 13px;
+      color: #948fb0;
+      margin-bottom: 15px;
+      line-height: 1.5;
+    }
+
+    .card-btn {
+      padding: 8px 20px;
+      background: rgba(114, 46, 209, 0.25);
+      color: #d4c7f0;
+      border: none;
+      border-radius: 6px;
+      cursor: pointer;
+      transition: all 0.3s ease;
+    }
+
+    .card-btn:hover {
+      background: rgba(114, 46, 209, 0.4);
+    }
+
+    /* 重点卡片按钮强化 */
+    .highlight-btn {
+      background: rgba(167, 139, 250, 0.4);
+      color: #fff;
+      padding: 12px 28px;
+      font-size: 15px;
+    }
+
+    .highlight-btn:hover {
+      background: rgba(167, 139, 250, 0.6);
+      box-shadow: 0 0 15px rgba(167, 139, 250, 0.3);
+    }
+
+    /* 底部隐私说明 */
+    .footer-tips {
+      text-align: center;
+      padding: 40px 0 20px;
+      color: #666;
+      font-size: 12px;
+      position: relative;
+      z-index: 1;
+    }
+
+    /* ── 上传区 ────────────────────────────────────────────── */
+    .upload-section {
+      display: none;
+      max-width: 680px;
+      margin: 0 auto;
+      padding: 100px 24px 60px;
+    }
+
+    .upload-section.active {
+      display: block;
+    }
+
+    .upload-title {
+      text-align: center;
+      font-size: 1.4rem;
+      font-weight: 400;
+      color: #e0e0e0;
+      margin-bottom: 40px;
+      letter-spacing: 3px;
+      background: linear-gradient(90deg, #A78BFA, #60A5FA);
+      background-size: 200% auto;
+      -webkit-background-clip: text;
+      background-clip: text;
+      color: transparent;
+      animation: neonFlow 6s linear infinite;
+    }
+
+    .cards {
+      display: grid;
+      grid-template-columns: repeat(2, 1fr);
+      gap: 14px;
+      margin-bottom: 36px;
+    }
+
+    .card {
+      background: rgba(30, 30, 50, 0.35);
+      border: 1px solid rgba(140, 120, 220, 0.2);
+      border-radius: 12px;
+      padding: 22px 20px;
+      cursor: pointer;
+      transition: all 0.3s ease;
+      display: flex;
+      align-items: center;
+      gap: 14px;
+    }
+
+    .card:hover {
+      border-color: rgba(140, 120, 220, 0.5);
+      box-shadow: 0 4px 20px rgba(140, 120, 220, 0.15);
+    }
+
+    .card-icon {
+      font-size: 24px;
+      flex-shrink: 0;
+    }
+
+    .card-body {
+      flex: 1;
+    }
+
+    .card-title-text {
+      font-size: 14px;
+      font-weight: 500;
+      color: #c4b5e8;
+      margin-bottom: 4px;
+    }
+
+    .card-desc-text {
+      font-size: 12px;
+      color: #948fb0;
+      line-height: 1.4;
+    }
+
+    .card input[type="file"] {
+      display: none;
+    }
+
+    .card-full {
+      grid-column: 1 / -1;
+    }
+
+    .divider {
+      width: 36px;
+      height: 1px;
+      background: linear-gradient(90deg, transparent, rgba(167,139,250,0.5), transparent);
+      margin: 0 auto 36px;
+    }
+
+    .start-btn {
+      display: block;
+      width: 100%;
+      max-width: 280px;
+      margin: 0 auto;
+      padding: 14px 24px;
+      background: rgba(167, 139, 250, 0.35);
+      color: #fff;
+      border-radius: 8px;
+      font-size: 14px;
+      font-weight: 600;
+      border: none;
+      cursor: pointer;
+      transition: all 0.2s ease;
+      letter-spacing: 2px;
+    }
+
+    .start-btn:hover {
+      background: rgba(167, 139, 250, 0.55);
+      box-shadow: 0 0 20px rgba(167, 139, 250, 0.2);
+    }
+
+    .start-btn:active {
+      transform: scale(0.97);
+    }
+
+    /* ── 对话窗口 ─────────────────────────────────────────── */
+    .chat-frame {
+      display: none;
+      max-width: 960px;
+      margin: 0 auto;
+      border-radius: 16px;
+      overflow: hidden;
+      box-shadow: 0 20px 80px rgba(0,0,0,0.8);
+      border: 1px solid rgba(140, 120, 220, 0.2);
+    }
+
+    .chat-frame.active {
+      display: block;
+    }
+
+    .chat-frame iframe {
+      width: 100%;
+      height: 640px;
+      border: none;
+      display: block;
+      background: #0f172a;
+    }
+
+    .back-btn {
+      display: block;
+      margin: 28px auto 0;
+      background: transparent;
+      border: none;
+      color: #666;
+      font-size: 12px;
+      cursor: pointer;
+      transition: color 0.2s;
+    }
+
+    .back-btn:hover {
+      color: #948fb0;
+    }
+
+    /* 响应式适配 */
+    @media (max-width: 768px) {
+      .main-content {
+        grid-template-columns: 1fr;
+      }
+
+      .main-title {
+        font-size: 36px;
+        letter-spacing: 6px;
+      }
+
+      .main-slogan {
+        font-size: 18px;
+      }
+
+      .container {
+        padding: 80px 16px 40px;
+      }
+
+      nav {
+        padding: 12px 16px;
+      }
+
+      .cards {
+        grid-template-columns: 1fr;
+      }
+
+      .func-card {
+        padding: 18px;
+      }
+
+      .highlight-card {
+        min-height: 220px;
+      }
+
+      .chat-frame iframe {
+        height: 500px;
+      }
+
+      .upload-section {
+        padding: 80px 16px 40px;
+      }
+    }
+
+    /* 修复移动端安全区域 */
+    @supports (padding: env(safe-area-inset-top)) {
+      body {
+        padding-top: env(safe-area-inset-top);
+        padding-bottom: env(safe-area-inset-bottom);
+      }
+    }
+  </style>
+</head>
+<body>
+  <!-- 流星背景 -->
+  <div class="meteor-container" id="meteorContainer"></div>
+
+  <!-- 导航栏 -->
+  <nav>
+    <div class="nav-logo">想你了</div>
+    <button class="nav-btn" onclick="showUpload()">开始使用</button>
+  </nav>
+
+  <!-- 主内容区 -->
+  <div class="container" id="heroContainer">
+    <h1 class="main-title">想你了</h1>
+    <p class="main-slogan">万般尘世离散，想你了续情缘</p>
+
+    <div class="main-content">
+      <div class="left-func-list">
+        <div class="func-card" onclick="document.getElementById('file-photo').click()">
+          <h3 class="card-title">📹 视频/照片上传</h3>
+          <p class="card-desc">上传亲人、宠物的珍贵影像，永久私密留存回忆</p>
+          <button class="card-btn">上传素材</button>
+        </div>
+
+        <div class="func-card" onclick="document.getElementById('file-audio').click()">
+          <h3 class="card-title">🎤 声音上传</h3>
+          <p class="card-desc">上传语音片段，复刻熟悉声线，跨越距离轻声对话</p>
+          <button class="card-btn">上传语音</button>
+        </div>
+
+        <div class="func-card" onclick="document.getElementById('file-chat').click()">
+          <h3 class="card-title">💬 回忆上传</h3>
+          <p class="card-desc">导入过往聊天记录与回忆，保留完整对话记忆与温度</p>
+          <button class="card-btn">导入记录</button>
+        </div>
+      </div>
+
+      <div class="right-highlight-card">
+        <div class="func-card highlight-card" onclick="startChat()">
+          <h3 class="card-title" style="font-size: 22px;">✨ 开启续缘对话</h3>
+          <p class="card-desc" style="font-size: 14px; margin: 15px 0 25px;">依托AI影像技术，与思念之人开启专属对话空间，跨越别离距离，随心倾诉心底思念</p>
+          <button class="card-btn highlight-btn">进入对话</button>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- 上传卡片区 -->
+  <div class="upload-section" id="uploadSection">
+    <h2 class="upload-title">✨ 选择你想要上传的素材</h2>
+
+    <div class="cards">
+      <div class="card" onclick="document.getElementById('file-photo').click()">
+        <div class="card-icon">📷</div>
+        <div class="card-body">
+          <div class="card-title-text">照片/视频上传</div>
+          <div class="card-desc-text">上传亲人照片或视频，让回忆重现</div>
+        </div>
+        <input type="file" id="file-photo" accept="image/*,video/*">
+      </div>
+
+      <div class="card" onclick="document.getElementById('file-audio').click()">
+        <div class="card-icon">🎙️</div>
+        <div class="card-body">
+          <div class="card-title-text">声音上传</div>
+          <div class="card-desc-text">上传语音片段，复刻熟悉的声音</div>
+        </div>
+        <input type="file" id="file-audio" accept="audio/*">
+      </div>
+
+      <div class="card card-full" onclick="document.getElementById('file-chat').click()">
+        <div class="card-icon">💬</div>
+        <div class="card-body">
+          <div class="card-title-text">聊天记录 · 共同回忆对话</div>
+          <div class="card-desc-text">导入聊天记录，延续未尽的话题</div>
+        </div>
+        <input type="file" id="file-chat" accept=".txt,.json,.csv">
+      </div>
+    </div>
+
+    <div class="divider"></div>
+
+    <button class="start-btn" onclick="startChat()">开始对话</button>
+    <button class="back-btn" onclick="showHero()">← 返回首页</button>
+  </div>
+
+  <!-- 对话窗口 -->
+  <div class="chat-frame" id="chatFrame">
+    <iframe id="chatIframe" src="http://localhost:8010/webrtcapi.html"></iframe>
+  </div>
+
+  <!-- 底部说明 -->
+  <div class="footer-tips" id="footerTips">本地离线私密部署 · 所有功能首页直达 · 无二次跳转 · 数据安全不外流</div>
+
+  <script>
+    function showUpload() {
+      document.getElementById('heroContainer').style.display = 'none';
+      document.getElementById('uploadSection').classList.add('active');
+      document.getElementById('footerTips').style.display = 'block';
+    }
+
+    function showHero() {
+      document.getElementById('heroContainer').style.display = 'block';
+      document.getElementById('uploadSection').classList.remove('active');
+      document.getElementById('chatFrame').classList.remove('active');
+    }
+
+    function startChat() {
+      document.getElementById('uploadSection').classList.remove('active');
+      document.getElementById('heroContainer').style.display = 'none';
+      document.getElementById('chatFrame').classList.add('active');
+    }
+
+    // 流星生成逻辑
+    const container = document.getElementById('meteorContainer');
+
+    function createMeteor() {
+      const meteor = document.createElement('div');
+      meteor.classList.add('meteor');
+
+      const startX = Math.random() * (window.innerWidth * 1.5);
+      const startY = Math.random() * (window.innerHeight * 0.5);
+      meteor.style.left = startX + 'px';
+      meteor.style.top = startY + 'px';
+
+      const duration = 1.2 + Math.random() * 1.6;
+      meteor.style.animationDuration = duration + 's';
+
+      const width = 1 + Math.random() * 2;
+      const height = 80 + Math.random() * 40;
+      meteor.style.width = width + 'px';
+      meteor.style.height = height + 'px';
+
+      const rotate = -30 - Math.random() * 30;
+      meteor.style.transform = `rotate(${rotate}deg)`;
+
+      container.appendChild(meteor);
+
+      setTimeout(() => {
+        meteor.remove();
+      }, duration * 1000);
+    }
+
+    createMeteor();
+    setInterval(createMeteor, 3000);
+  </script>
+</body>
+</html>
